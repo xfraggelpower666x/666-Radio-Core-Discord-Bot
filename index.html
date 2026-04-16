@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>ZIP → GitHub PRO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+body {
+    background: #050505;
+    color: #00ffff;
+    font-family: monospace;
+    padding: 20px;
+}
+h1 { color: #ff00ff; }
+
+input, button {
+    margin: 5px;
+    padding: 10px;
+    background: #111;
+    border: 1px solid #00ffff;
+    color: #00ffff;
+}
+
+#log {
+    background: #000;
+    height: 250px;
+    overflow: auto;
+    padding: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>ZIP → GitHub PRO DEPLOY</h1>
+
+<input type="file" id="zip"><br>
+
+<input id="owner" placeholder="Owner"><br>
+<input id="repo" placeholder="Repo"><br>
+<input id="branch" placeholder="Branch"><br>
+<input id="token" type="password" placeholder="Token"><br>
+
+<button onclick="run()">DEPLOY</button>
+
+<h3>Log</h3>
+<div id="log"></div>
+
+<script>
+function log(t){document.getElementById("log").innerHTML += t+"<br>"}
+
+async function run(){
+const file = document.getElementById("zip").files[0];
+const zip = await JSZip.loadAsync(file);
+
+for (let name in zip.files){
+if(!zip.files[name].dir){
+await upload(name, zip.files[name]);
+}
+}
+}
+
+async function upload(path,file){
+const owner = ownerInput();
+const repo = repoInput();
+const branch = branchInput();
+const token = tokenInput();
+
+const content = await file.async("base64");
+
+const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+
+let sha = null;
+
+try{
+let r = await fetch(url,{headers:{Authorization:`Bearer ${token}`}});
+if(r.ok){
+let d = await r.json();
+sha = d.sha;
+}
+}catch(e){}
+
+let body = {
+message: sha ? "update "+path : "create "+path,
+content: content,
+branch: branch
+};
+if(sha) body.sha = sha;
+
+let res = await fetch(url,{
+method:"PUT",
+headers:{
+Authorization:`Bearer ${token}`,
+"Content-Type":"application/json"
+},
+body:JSON.stringify(body)
+});
+
+if(res.ok){
+log("✅ "+path);
+}else{
+log("❌ "+path);
+}
+}
+
+function ownerInput(){return document.getElementById("owner").value}
+function repoInput(){return document.getElementById("repo").value}
+function branchInput(){return document.getElementById("branch").value}
+function tokenInput(){return document.getElementById("token").value}
+</script>
+
+</body>
+</html>
