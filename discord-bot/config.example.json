@@ -1,0 +1,27 @@
+{
+  "name": "666RadioCoreDJ",
+  "version": "1.3.0",
+  "purpose": "Discord control bot for SonicPanel/MyIDJ AutoDJ skip, Jingle/ID control and Discord voice stream with 5 presets, pause/resume/stop and volume default control.",
+  "notes": [
+    "Real credentials belong in .env only.",
+    "No real DJ login data is stored in public project files.",
+    "SonicPanel skip/jingle URLs must be captured from the DJ Panel network tab or supplied by the provider.",
+    "SHOUTcast kicksrc is only a fallback, not a clean AutoDJ skip.",
+    "Voice volume changes affect only the Discord bot output, not SonicPanel."
+  ],
+  "voice": {
+    "commands": [
+      "/play",
+      "/play preset:1-5",
+      "/pause",
+      "/resume",
+      "/stop",
+      "/volume",
+      "/volume level:<0-200>",
+      "/volume default:true"
+    ],
+    "preset_count": 5,
+    "default_preset_env": "VOICE_DEFAULT_PRESET",
+    "default_volume_env": "VOICE_DEFAULT_VOLUME_PERCENT"
+  }
+}

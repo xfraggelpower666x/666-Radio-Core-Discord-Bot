@@ -1,0 +1,4 @@
+﻿# MOD SLASH COMMANDS
+
+See MOD-002 in ../MODULE_REGISTRY.md.
+

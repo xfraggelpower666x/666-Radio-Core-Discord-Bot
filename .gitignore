@@ -1,12 +1,37 @@
-node_modules/
+# ============================================================
+# 666RadioCoreDJ Repo .gitignore
+# Erstellt: 2026-06-03
+# Geändert: 2026-06-03
+# Zweck: Schützt Secrets, lokale Builds und Laufzeitdaten.
+# ============================================================
+
+# Secrets / lokale Umgebungen
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Node / Paketmanager
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-coverage/
+
+# Build / Cache / Runtime
+.dist/
 dist/
-tmp/
+build/
+.cache/
+.wrangler/
+wrangler.toml.backup
+logs/
+*.log
+
+# OS / Editor
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/

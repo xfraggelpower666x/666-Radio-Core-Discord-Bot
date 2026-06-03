@@ -1,0 +1,4 @@
+﻿# MOD RADIO CORE
+
+See MOD-005 in ../MODULE_REGISTRY.md.
+

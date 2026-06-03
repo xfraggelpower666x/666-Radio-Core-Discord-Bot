@@ -1,0 +1,4 @@
+﻿# MODULE INDEX
+
+See ../MODULE_REGISTRY.md.
+
