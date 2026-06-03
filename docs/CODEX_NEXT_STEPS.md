@@ -1,4 +1,4 @@
-﻿# Codex Next Steps
+# Codex Next Steps
 
 1. Verify new GitHub Actions Radio Core CI run on branch Codex.
 2. Verify Cloudflare Root Directory = worker.
@@ -11,4 +11,4 @@
 9. Verify stream health transitions with a real SHOUTcast/Icecast URL.
 10. Capture SonicPanel Skip/Jingle endpoints without secrets.
 11. Deploy Worker and test /health, /presets, /nowplaying.
-
+12. Provide `CLOUDFLARE_API_TOKEN` in the deploy environment or trigger Cloudflare Git deploy from the dashboard; current live `/health` returns `Hello World!`.
