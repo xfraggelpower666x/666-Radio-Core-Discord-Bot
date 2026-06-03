@@ -29,6 +29,17 @@ Date: 2026-06-03
 
 Verification Run 03: Bot npm install PASS, Bot npm run check PASS, Bot npm run audit:local PASS, Worker npm run check PASS, Runtime require PASS. BLOCKER open: NEIN. KRITISCH open: NEIN.
 
+## Audit Run 04
+
+Date: 2026-06-03
+
+| ID | Bereich | Fehlerklasse | Befund | Reparatur | Status |
+|---|---|---|---|---|---|
+| A4-001 | GitHub Actions | WICHTIG | GitHub hatte nur Pages Build/Deployment auf Commit 27bf78f; kein Bot-/Worker-CI fuer Codex. | .github/workflows/ci.yml ergaenzt: Node 24, npm ci, Bot check, Bot local audit, Worker check. | REPARIERT |
+| A4-002 | GitHub Actions | WICHTIG | Pages Workflow meldet Node.js 20 Action Deprecation fuer bestehende Actions. | Neuer Radio Core CI nutzt actions/checkout@v5 und actions/setup-node@v5 mit Node 24. Bestehender Pages-intern/anderer Workflow bleibt UNBEKANNT / NACHZUTRAGEN, falls separat konfiguriert. | TEILWEISE REPARIERT |
+
+Verification Run 04: GitHub commit 27bf78f online bestaetigt; Pages build/deployment #5 SUCCESS mit Node-20-Warnung; Radio Core CI workflow lokal hinzugefuegt, Push-Run nach Commit zu pruefen. BLOCKER open: NEIN. KRITISCH open: NEIN.
+
 ## Final Questions
 
 Chat context considered: JA. Existing code considered: JA. Discord, Security, Radio Core, AutoDJ, Cloudflare, GitHub, Worker and Webhook layers separated: JA. Secrets protected: JA. Deploy route protected: JA. False merges: NEIN. Unknowns marked: JA. Codex-ready: JA.

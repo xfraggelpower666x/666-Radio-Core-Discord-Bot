@@ -1,0 +1,46 @@
+name: Radio Core CI
+
+on:
+  push:
+    branches:
+      - Codex
+  pull_request:
+    branches:
+      - Codex
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate bot and worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install Discord bot dependencies
+        working-directory: discord-bot
+        run: npm ci
+
+      - name: Check Discord bot syntax
+        working-directory: discord-bot
+        run: npm run check
+
+      - name: Run Discord bot local audit
+        working-directory: discord-bot
+        run: npm run audit:local
+
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Check Worker syntax
+        working-directory: worker
+        run: npm run check

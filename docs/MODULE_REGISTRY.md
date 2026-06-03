@@ -20,3 +20,4 @@ MOD-017 AUDIT / TEST SYSTEM: PASS, local checks completed.
 MOD-018 ICY METADATA READER: BESTAETIGT, discord-bot/src/radio/icyMetadataReader.js.
 MOD-019 TRACK CHANGE DETECTION: BESTAETIGT, discord-bot/src/utils/track.js and voiceRelay event binding.
 MOD-020 DISCORD LOG CHANNEL SUPPORT: BESTAETIGT / config-dependent, RADIO_LOG_CHANNEL_ID.
+MOD-021 GITHUB RADIO CORE CI: BESTAETIGT, .github/workflows/ci.yml.
