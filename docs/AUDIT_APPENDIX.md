@@ -40,6 +40,18 @@ Date: 2026-06-03
 
 Verification Run 04: GitHub commit 27bf78f online bestaetigt; Pages build/deployment #5 SUCCESS mit Node-20-Warnung; Radio Core CI workflow lokal hinzugefuegt, Push-Run nach Commit zu pruefen. BLOCKER open: NEIN. KRITISCH open: NEIN.
 
+## Audit Run 05
+
+Date: 2026-06-04
+
+| ID | Bereich | Fehlerklasse | Befund | Reparatur | Status |
+|---|---|---|---|---|---|
+| A5-001 | GitHub Actions | WICHTIG | Audit Run 04 hatte den Radio Core CI Push-Run noch als zu pruefen markiert. | GitHub REST API abgefragt; `Radio Core CI` ist aktiv und Run `26917558954` auf `39abbf9` ist `success`. | REPARIERT |
+| A5-002 | Cloudflare Deploy | EXTERNER BLOCKER | `CLOUDFLARE_API_TOKEN` ist lokal weiterhin nicht gesetzt. | Kein Secret erzeugt oder geschrieben; Deploy bleibt extern in GO_RUN_2026-06-04 dokumentiert. | BLOCKED / NACHZUTRAGEN |
+| A5-003 | Discord Registration | EXTERNER BLOCKER | `discord-bot/.env` ist lokal weiterhin nicht vorhanden. | Keine Beispielwerte als Secrets missbraucht; Registrierung bleibt extern in GO_RUN_2026-06-04 dokumentiert. | BLOCKED / NACHZUTRAGEN |
+
+Verification Run 05: GitHub Radio Core CI PASS, Bot npm run check PASS, Worker npm run check PASS. Repo BLOCKER open: NEIN. Repo KRITISCH open: NEIN. External deploy/registration blockers remain NACHZUTRAGEN.
+
 ## Final Questions
 
 Chat context considered: JA. Existing code considered: JA. Discord, Security, Radio Core, AutoDJ, Cloudflare, GitHub, Worker and Webhook layers separated: JA. Secrets protected: JA. Deploy route protected: JA. False merges: NEIN. Unknowns marked: JA. Codex-ready: JA.
