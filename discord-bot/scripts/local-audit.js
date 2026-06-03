@@ -16,9 +16,12 @@ const required = [
   'src/index.js',
   'src/config.js',
   'src/radio/radioController.js',
+  'src/radio/icyMetadataReader.js',
+  'src/radio/streamHealthMonitor.js',
   'src/radio/adapters/sonicPanelAdapter.js',
   'src/radio/adapters/shoutcastAdapter.js',
   'src/voice/voiceRelay.js',
+  'src/utils/track.js',
   'src/discord/commands.js',
   'src/discord/panel.js',
   'src/discord/replies.js',
@@ -53,7 +56,10 @@ const scanTargets = [
   'docs/AUDIT.md',
   'src/config.js',
   'src/index.js',
-  'src/voice/voiceRelay.js'
+  'src/voice/voiceRelay.js',
+  'src/radio/icyMetadataReader.js',
+  'src/radio/streamHealthMonitor.js',
+  'src/utils/track.js'
 ];
 
 for (const file of scanTargets) {
@@ -77,12 +83,20 @@ for (const commandName of ["setName('play')", "setName('pause')", "setName('resu
 }
 
 const voiceFile = fs.readFileSync(path.join(root, 'src/voice/voiceRelay.js'), 'utf8');
-for (const marker of ['pauseFromInteraction', 'resumeFromInteraction', 'setVolumeFromInteraction', 'resetVolumeFromInteraction', 'presetByInput']) {
+for (const marker of ['pauseFromInteraction', 'resumeFromInteraction', 'setVolumeFromInteraction', 'resetVolumeFromInteraction', 'presetByInput', 'IcyMetadataReader', 'StreamHealthMonitor', 'sendLogMessage']) {
   if (!voiceFile.includes(marker)) {
     console.error(`FEHLT: Voice-Funktion ${marker}`);
     failed = true;
   }
 }
 
+const envExample = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
+for (const envName of ['RADIO_LOG_CHANNEL_ID', 'STREAM_HEALTH_INTERVAL_SECONDS', 'STREAM_HEALTH_TIMEOUT_SECONDS']) {
+  if (!envExample.includes(envName)) {
+    console.error(`FEHLT: Env-Platzhalter ${envName}`);
+    failed = true;
+  }
+}
+
 if (failed) process.exit(1);
-console.log('AUDIT PASS: Struktur vollständig, Voice-Presets/Pause/Resume/Volume vorhanden, keine bekannten Secrets in öffentlichen Dateien.');
+console.log('AUDIT PASS: Struktur vollständig, Voice-Presets/Pause/Resume/Volume, ICY-Metadata, Health-Monitoring und Log-Channel-Support vorhanden, keine bekannten Secrets in öffentlichen Dateien.');

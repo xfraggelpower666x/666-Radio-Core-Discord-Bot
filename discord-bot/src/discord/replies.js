@@ -42,6 +42,11 @@ function resultEmbed(title, result) {
 }
 
 function statusEmbed(status, voiceStatus = {}) {
+  const health = voiceStatus.streamHealth;
+  const healthText = health
+    ? (health.healthy ? `OK (${health.statusCode || 'UNBEKANNT'})` : `Problem: ${redact(health.error || 'UNBEKANNT')}`)
+    : 'UNBEKANNT';
+
   const embed = new EmbedBuilder()
     .setTitle('666RadioCoreDJ Status')
     .addFields(
@@ -56,7 +61,10 @@ function statusEmbed(status, voiceStatus = {}) {
       { name: 'Presets', value: `${status.voicePresetCount || 0}/5`, inline: true },
       { name: 'Default', value: `Preset ${status.voiceDefaultPreset || '1'} / ${status.voiceDefaultVolumePercent || 80}%`, inline: true },
       { name: 'Aktiv', value: voiceStatus.active ? `${voiceStatus.paused ? 'pausiert' : 'läuft'} in ${redact(voiceStatus.channelName)}` : 'nein', inline: true },
-      { name: 'Aktuelle Lautstärke', value: `${voiceStatus.volumePercent || status.voiceDefaultVolumePercent || 80}%`, inline: true }
+      { name: 'Aktuelle Lautstärke', value: `${voiceStatus.volumePercent || status.voiceDefaultVolumePercent || 80}%`, inline: true },
+      { name: 'Broadcast Status', value: healthText, inline: true },
+      { name: 'Station', value: redact(voiceStatus.stationName || voiceStatus.presetName || 'UNBEKANNT'), inline: true },
+      { name: 'Track', value: redact(voiceStatus.currentTrack || 'UNBEKANNT'), inline: false }
     );
 
   return { embeds: [embed], ephemeral: true };

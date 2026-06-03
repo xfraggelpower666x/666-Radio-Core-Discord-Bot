@@ -67,6 +67,7 @@ const config = {
     clientId: process.env.DISCORD_CLIENT_ID || '',
     guildId: process.env.DISCORD_GUILD_ID || '',
     textChannelId: process.env.RADIO_TEXT_CHANNEL_ID || '',
+    logChannelId: process.env.RADIO_LOG_CHANNEL_ID || process.env.RADIO_TEXT_CHANNEL_ID || '',
     allowedRoleIds: list(process.env.ALLOWED_ROLE_IDS)
   },
   cooldowns: {
@@ -105,6 +106,8 @@ const config = {
     presets: buildStreamPresets(),
     bitrate: int(process.env.RADIO_STREAM_BITRATE, 128000),
     reconnectSeconds: int(process.env.VOICE_RECONNECT_SECONDS, 10),
+    healthIntervalSeconds: int(process.env.STREAM_HEALTH_INTERVAL_SECONDS, 30),
+    healthTimeoutSeconds: int(process.env.STREAM_HEALTH_TIMEOUT_SECONDS, 10),
     defaultVolumePercent,
     maxVolumePercent
   }

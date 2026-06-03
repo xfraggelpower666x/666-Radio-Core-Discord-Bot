@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node index.js",
     "register": "node scripts/register-commands.js",
-    "check": "node --check index.js && node --check src/index.js && node --check scripts/register-commands.js && node --check src/voice/voiceRelay.js && node --check src/discord/commands.js && node --check src/discord/panel.js && node --check src/discord/replies.js && node --check src/config.js",
+    "check": "node --check index.js && node --check src/index.js && node --check scripts/register-commands.js && node --check src/voice/voiceRelay.js && node --check src/radio/icyMetadataReader.js && node --check src/radio/streamHealthMonitor.js && node --check src/utils/track.js && node --check src/discord/commands.js && node --check src/discord/panel.js && node --check src/discord/replies.js && node --check src/config.js",
     "audit:local": "node scripts/local-audit.js"
   },
   "keywords": [

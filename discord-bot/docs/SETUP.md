@@ -22,6 +22,7 @@ DISCORD_TOKEN=...
 DISCORD_CLIENT_ID=...
 DISCORD_GUILD_ID=...
 RADIO_TEXT_CHANNEL_ID=...
+RADIO_LOG_CHANNEL_ID=...
 ALLOWED_ROLE_IDS=...
 ```
 
@@ -44,6 +45,15 @@ STREAM_PRESET_2_VOLUME_PERCENT=80
 ```
 
 Wenn du nur einen Stream nutzt, reicht Preset 1 oder `RADIO_STREAM_URL`.
+
+ICY-Metadaten und Health-Checks laufen automatisch fuer http(s)-SHOUTcast/Icecast-Streams:
+
+```env
+STREAM_HEALTH_INTERVAL_SECONDS=30
+STREAM_HEALTH_TIMEOUT_SECONDS=10
+```
+
+Wenn `RADIO_LOG_CHANNEL_ID` gesetzt ist, postet der Bot Trackwechsel und Health-Statuswechsel in diesen Kanal.
 
 ## 4. Commands registrieren
 

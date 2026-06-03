@@ -20,6 +20,8 @@ const {
 const { PermissionsBitField } = require('discord.js');
 const logger = require('../utils/logger');
 const { redact } = require('../utils/redact');
+const { IcyMetadataReader } = require('../radio/icyMetadataReader');
+const { StreamHealthMonitor } = require('../radio/streamHealthMonitor');
 
 function seconds(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -43,6 +45,15 @@ function normalizeKey(value) {
 
 function ffmpegBinary() {
   return ffmpegStatic || process.env.FFMPEG_PATH || 'ffmpeg';
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function createFfmpegPcmStream(streamUrl) {
@@ -82,6 +93,8 @@ class VoiceRelayManager {
     this.config = config;
     this.states = new Map();
     this.reconnectSeconds = seconds(config.voiceRelay.reconnectSeconds, 10);
+    this.healthIntervalSeconds = seconds(config.voiceRelay.healthIntervalSeconds, 30);
+    this.healthTimeoutSeconds = seconds(config.voiceRelay.healthTimeoutSeconds, 10);
     this.defaultVolumePercent = clamp(config.voiceRelay.defaultVolumePercent, 0, config.voiceRelay.maxVolumePercent || 200);
     this.maxVolumePercent = clamp(config.voiceRelay.maxVolumePercent || 200, 1, 200);
   }
@@ -125,6 +138,10 @@ class VoiceRelayManager {
       presetName: state && state.preset ? state.preset.name : '',
       presetId: state && state.preset ? state.preset.id : '',
       volumePercent: state ? Math.round(state.volumePercent) : this.defaultVolumePercent,
+      stationName: state && state.stationName ? state.stationName : '',
+      currentTrack: state && state.currentTrack ? state.currentTrack : '',
+      lastTrackChangeAt: state && state.lastTrackChangeAt ? state.lastTrackChangeAt : '',
+      streamHealth: state && state.streamHealth ? { ...state.streamHealth } : null,
       configuredPresets: this.configuredPresets().length,
       defaultVolumePercent: this.defaultVolumePercent,
       maxVolumePercent: this.maxVolumePercent
@@ -177,6 +194,15 @@ class VoiceRelayManager {
       };
     }
 
+    if (!isHttpUrl(preset.url)) {
+      return {
+        ok: false,
+        code: 'STREAM_URL_INVALID',
+        adapter: 'voice',
+        message: 'Stream-URL ist ungueltig. Fuer SHOUTcast/Icecast werden http(s)-URLs erwartet.'
+      };
+    }
+
     const validation = this.validateVoiceChannel(channel, channel.client.user);
     if (!validation.ok) return { ...validation, adapter: 'voice' };
 
@@ -218,6 +244,7 @@ class VoiceRelayManager {
       guildId: channel.guild.id,
       channelId: channel.id,
       channelName: channel.name,
+      client: channel.client,
       connection,
       player,
       ffmpeg: null,
@@ -228,12 +255,24 @@ class VoiceRelayManager {
       context,
       preset,
       streamUrl: preset.url,
-      volumePercent
+      volumePercent,
+      metadataReader: new IcyMetadataReader({ logger }),
+      healthMonitor: new StreamHealthMonitor({
+        intervalMs: this.healthIntervalSeconds * 1000,
+        timeoutMs: this.healthTimeoutSeconds * 1000,
+        logger
+      }),
+      stationName: '',
+      currentTrack: '',
+      lastTrackChangeAt: '',
+      streamHealth: null
     };
 
     this.states.set(channel.guild.id, state);
     this.attachStateEvents(state);
+    this.attachStreamObservability(state);
     this.startStreamForState(state);
+    this.startStreamObservability(state);
 
     return {
       ok: true,
@@ -268,6 +307,83 @@ class VoiceRelayManager {
     state.connection.on(VoiceConnectionStatus.Destroyed, () => {
       this.cleanupState(state);
     });
+  }
+
+  attachStreamObservability(state) {
+    state.metadataReader.on('headers', (headers) => {
+      if (headers.stationName) state.stationName = headers.stationName;
+      logger.info('ICY metadata connected.', {
+        guildId: state.guildId,
+        stationName: headers.stationName || 'UNBEKANNT',
+        statusCode: headers.statusCode,
+        contentType: headers.contentType,
+        metadataInterval: headers.metadataInterval
+      });
+    });
+
+    state.metadataReader.on('unavailable', (reason) => {
+      logger.warn('ICY metadata unavailable.', { guildId: state.guildId, reason });
+    });
+
+    state.metadataReader.on('trackChange', (event) => {
+      state.currentTrack = event.trackTitle;
+      state.lastTrackChangeAt = new Date().toISOString();
+      logger.info('Track change detected.', {
+        guildId: state.guildId,
+        previous: event.previousTrackTitle || 'UNBEKANNT',
+        current: event.trackTitle
+      });
+      this.sendLogMessage(state, 'Track Change', `Jetzt laeuft: ${event.trackTitle}`);
+    });
+
+    state.metadataReader.on('error', (error) => {
+      logger.warn('ICY metadata reader error.', { guildId: state.guildId, error: error.message });
+    });
+
+    state.metadataReader.on('end', () => {
+      logger.warn('ICY metadata reader ended.', { guildId: state.guildId });
+    });
+
+    state.healthMonitor.on('status', (status) => {
+      state.streamHealth = status;
+    });
+
+    state.healthMonitor.on('healthy', (status) => {
+      logger.info('Stream health changed to healthy.', { guildId: state.guildId, statusCode: status.statusCode });
+      this.sendLogMessage(state, 'Stream Health', `OK (${status.statusCode || 'UNBEKANNT'})`);
+    });
+
+    state.healthMonitor.on('unhealthy', (status) => {
+      logger.warn('Stream health changed to unhealthy.', { guildId: state.guildId, error: status.error });
+      this.sendLogMessage(state, 'Stream Health', `Problem: ${status.error || 'UNBEKANNT'}`);
+      this.scheduleRestart(state);
+    });
+  }
+
+  startStreamObservability(state) {
+    if (!state || state.manualStop || state.paused) return;
+    state.metadataReader.start(state.streamUrl);
+    state.healthMonitor.start(state.streamUrl);
+  }
+
+  stopStreamObservability(state) {
+    if (!state) return;
+    state.metadataReader.stop();
+    state.healthMonitor.stop();
+  }
+
+  async sendLogMessage(state, title, message) {
+    const channelId = this.config.discord.logChannelId;
+    if (!channelId || !state || !state.client) return;
+
+    try {
+      const channel = await state.client.channels.fetch(channelId);
+      if (channel && channel.send) {
+        await channel.send(`**666RadioCoreDJ ${redact(title)}**\n${redact(message)}`);
+      }
+    } catch (error) {
+      logger.warn('Log channel message could not be sent.', { guildId: state.guildId, error: error.message });
+    }
   }
 
   startStreamForState(state) {
@@ -306,6 +422,7 @@ class VoiceRelayManager {
       state.restartTimer = null;
       if (!state.manualStop && !state.paused && this.states.get(state.guildId) === state) {
         this.startStreamForState(state);
+        this.startStreamObservability(state);
       }
     }, this.reconnectSeconds * 1000);
   }
@@ -331,6 +448,7 @@ class VoiceRelayManager {
     }
     this.killFfmpeg(state);
     state.resource = null;
+    this.stopStreamObservability(state);
   }
 
   activeStateOrError(guildId, commandName) {
@@ -395,6 +513,7 @@ class VoiceRelayManager {
 
     state.paused = false;
     this.startStreamForState(state);
+    this.startStreamObservability(state);
 
     return {
       ok: true,

@@ -20,6 +20,11 @@ Geprüft wird, ob der Bot weiterhin modular bleibt und die neuen Voice-Funktione
 | SonicPanel-Skip bleibt modular vorbereitet | PASS |
 | Jingle-Adapter bleibt modular vorbereitet | PASS |
 | SHOUTcast-Fallback bleibt optional | PASS |
+| ICY Metadata Reader vorhanden | PASS |
+| Track Change Detection verdrahtet | PASS |
+| Stream Health Monitoring verdrahtet | PASS |
+| Broadcast Status in `/radio status` sichtbar | PASS |
+| Log Channel Support per `RADIO_LOG_CHANNEL_ID` | PASS |
 | Keine echten DJ-Secrets in öffentlichen Dateien | PASS |
 
 ## Nicht gelöst in diesem Build
