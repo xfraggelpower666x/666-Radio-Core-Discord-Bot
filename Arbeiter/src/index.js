@@ -1,6 +1,6 @@
 // ============================================================
 // 666 RadioBotAI — Vocard Sovereign Dashboard Worker
-// Version: v1.1.1
+// Version: v1.1.3
 //
 // Zweck:
 // - Cloudflare Worker API fuer RadioBotAI
@@ -18,7 +18,7 @@ const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, authorization, x-admin-token, x-discord-gate-code"
+  "access-control-allow-headers": "content-type, authorization, x-admin-token, x-discord-gate-code, x-666-auth-mode"
 };
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -53,7 +53,7 @@ function getPublicConfig(env) {
   return {
     projectName: env.PUBLIC_PROJECT_NAME || "666SOUNDsDESIGn WebRadio",
     botName: env.PUBLIC_BOT_NAME || "666 RadioBotAI",
-    version: env.PUBLIC_VERSION || "v1.1.1",
+    version: env.PUBLIC_VERSION || "v1.1.3",
     role: env.PUBLIC_WORKER_ROLE || "RadioBotAI API / Vocard Dashboard Bridge / Discord Shooter Control",
     webradioBaseUrl: base,
     streamUrl: env.PUBLIC_MAIN_STREAM_URL || `${base}/stream`,
@@ -61,6 +61,7 @@ function getPublicConfig(env) {
     nowPlayingUrl: env.PUBLIC_NOWPLAYING_URL || `${base}/api/nowplaying`,
     healthUrl: env.PUBLIC_HEALTH_URL || `${base}/health`,
     tuneInUrl: env.PUBLIC_TUNEIN_URL || "https://tunein.com/radio/s357001",
+    playerAlertBackendUrl: env.PLAYER_ALERT_BACKEND_URL || env.RENDA_PLAYER_ALERT_URL || env.RENDER_PLAYER_ALERT_URL || env.RENDA_BACKEND_URL || env.RENDER_BACKEND_URL || "",
     dashboardUrl: "/dashboard",
     workerEndpoints: [
       "/health",
@@ -75,7 +76,15 @@ function getPublicConfig(env) {
       "/api/discord/message",
       "/api/discord/nowplaying",
       "/api/discord/test",
+      "/api/player-alert/status",
+      "/api/player-alert/send",
+      "/api/player-alert/current",
+      "/api/player-alert/history",
+      "/render/status",
+      "/auth/status",
       "/auth/verify",
+      "/admin/status",
+      "/admin/protected-test",
       "/preset/1",
       "/preset/2",
       "/preset/3",
@@ -102,7 +111,90 @@ async function safeFetchJson(url, init = {}) {
   }
 }
 
-async function verifyAdmin(request, env) {
+function getAuthConfig(env) {
+  return {
+    adminTokenEnabled: Boolean(env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN),
+    gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256),
+    legacyGateHashEnabled: true,
+    adminAuthVerifyUrl: env.ADMIN_AUTH_VERIFY_URL || env.AUTH_VERIFY_URL || "",
+    adminAuthLoginUrl: env.ADMIN_AUTH_LOGIN_URL || env.AUTH_LOGIN_URL || "",
+    passwordWorkerUrl: env.ADMIN_PASSWORD_VERIFY_URL || env.ADMIN_PW_VERIFY_URL || env.PASSWORD_VERIFY_URL || env.PW_VERIFY_URL || "",
+    authAudience: env.AUTH_AUDIENCE || "666RadioBotAI",
+    authMode: env.AUTH_MODE || "hybrid"
+  };
+}
+
+function publicAuthStatus(env) {
+  const cfg = getAuthConfig(env);
+  return {
+    adminTokenEnabled: cfg.adminTokenEnabled,
+    gateCodeEnabled: cfg.gateCodeEnabled,
+    legacyGateHashEnabled: cfg.legacyGateHashEnabled,
+    adminAuthWorkerConfigured: Boolean(cfg.adminAuthVerifyUrl),
+    passwordWorkerConfigured: Boolean(cfg.passwordWorkerUrl),
+    authAudience: cfg.authAudience,
+    authMode: cfg.authMode,
+    note: "No token, password, cookie or secret value is exposed."
+  };
+}
+
+async function verifyExternalAuthWorker(request, env, authHeader) {
+  const cfg = getAuthConfig(env);
+  if (!cfg.adminAuthVerifyUrl || !authHeader) return { ok: false, method: "admin-auth-worker", reason: "missing_verify_url_or_authorization" };
+
+  // First try POST JSON because many auth bridges accept a compact verification payload.
+  const postResult = await safeFetchJson(cfg.adminAuthVerifyUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": authHeader,
+      "x-auth-audience": cfg.authAudience
+    },
+    body: JSON.stringify({ audience: cfg.authAudience, source: "666radiobotai-worker" })
+  });
+
+  if (postResult.ok && (postResult.data?.ok || postResult.data?.authorized || postResult.data?.valid || postResult.data?.authenticated)) {
+    return { ok: true, method: "admin-auth-worker-post" };
+  }
+
+  // Fallback GET for older worker contracts.
+  const getResult = await safeFetchJson(cfg.adminAuthVerifyUrl, {
+    method: "GET",
+    headers: {
+      "authorization": authHeader,
+      "x-auth-audience": cfg.authAudience
+    }
+  });
+
+  if (getResult.ok && (getResult.data?.ok || getResult.data?.authorized || getResult.data?.valid || getResult.data?.authenticated)) {
+    return { ok: true, method: "admin-auth-worker-get" };
+  }
+
+  return { ok: false, method: "admin-auth-worker", reason: "external_auth_rejected", status: postResult.status || getResult.status || 0 };
+}
+
+async function verifyPasswordWorker(request, env, body = null) {
+  const cfg = getAuthConfig(env);
+  if (!cfg.passwordWorkerUrl) return { ok: false, method: "password-worker", reason: "not_configured" };
+
+  const payload = body || await requestBody(request);
+  const password = payload.password || payload.pass || payload.gate || payload.code || "";
+  if (!password) return { ok: false, method: "password-worker", reason: "missing_password_payload" };
+
+  const result = await safeFetchJson(cfg.passwordWorkerUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-auth-audience": cfg.authAudience },
+    body: JSON.stringify({ password, audience: cfg.authAudience, source: "666radiobotai-dashboard" })
+  });
+
+  if (result.ok && (result.data?.ok || result.data?.authorized || result.data?.valid || result.data?.authenticated)) {
+    return { ok: true, method: "password-worker" };
+  }
+
+  return { ok: false, method: "password-worker", reason: "password_worker_rejected", status: result.status || 0 };
+}
+
+async function verifyAdmin(request, env, body = null) {
   const adminToken = env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN || "";
   const gateCode = env.DISCORD_GATE_CODE || "";
   const providedToken = request.headers.get("x-admin-token") || "";
@@ -117,15 +209,13 @@ async function verifyAdmin(request, env) {
     return { ok: true, method: "x-discord-gate-code" };
   }
 
-  const verifyUrl = env.ADMIN_AUTH_VERIFY_URL || "";
-  if (verifyUrl && auth) {
-    const result = await safeFetchJson(verifyUrl, {
-      method: "GET",
-      headers: { authorization: auth }
-    });
-    if (result.ok && (result.data?.ok || result.data?.authorized || result.data?.valid)) {
-      return { ok: true, method: "admin-auth-worker" };
-    }
+  const external = await verifyExternalAuthWorker(request, env, auth);
+  if (external.ok) return external;
+
+  // Passwort-Worker nur bei POST/Payload verwenden, damit GET-Status nie versehentlich sensible Werte verlangt.
+  if (request.method === "POST") {
+    const pw = await verifyPasswordWorker(request, env, body);
+    if (pw.ok) return pw;
   }
 
   return { ok: false, method: "none" };
@@ -251,24 +341,311 @@ async function handlePreset(request, env, presetId) {
   if (!allowed.includes(presetId)) {
     return json({ ok: false, error: "INVALID_PRESET", preset: presetId }, 400);
   }
+
+  if (request.method === "POST") {
+    const body = await requestBody(request);
+    const auth = await verifyAdmin(request, env, body);
+    if (!auth.ok) {
+      return json({
+        ok: false,
+        error: "UNAUTHORIZED",
+        preset: presetId,
+        note: "Preset switching is protected. Provide admin token, gate code or valid auth worker token.",
+        auth: publicAuthStatus(env)
+      }, 401);
+    }
+    return json({
+      ok: true,
+      protected: true,
+      auth: auth.method,
+      action: "PRESET_REQUEST_AUTHORIZED",
+      preset: presetId,
+      note: "Preset endpoint authorized. Real SonicPanel/AutoDJ switching remains a next integration step.",
+      timestamp: new Date().toISOString()
+    });
+  }
+
   return json({
     ok: true,
-    action: "PRESET_REQUEST_RECEIVED",
+    protected: false,
+    action: "PRESET_STATUS_ONLY",
     preset: presetId,
-    note: "Preset endpoint prepared. Real SonicPanel/AutoDJ switch must be connected through protected control logic later.",
+    note: "GET is read-only. POST requires admin/auth protection.",
+    timestamp: new Date().toISOString()
+  });
+}
+
+async function handleAuthStatus(env) {
+  return json({
+    ok: true,
+    auth: publicAuthStatus(env),
+    protectedRoutes: [
+      "POST /api/discord/message",
+      "POST /api/discord/manual",
+      "POST /api/discord/nowplaying",
+      "POST /api/discord/test",
+      "POST /preset/1..5",
+      "GET/POST /admin/status",
+      "GET/POST /admin/protected-test"
+    ],
     timestamp: new Date().toISOString()
   });
 }
 
 async function handleAuthVerify(request, env) {
-  const result = await verifyAdmin(request, env);
+  const body = request.method === "POST" ? await requestBody(request) : null;
+  const result = await verifyAdmin(request, env, body);
   return json({
     ok: result.ok,
     authenticated: result.ok,
     method: result.method,
+    auth: publicAuthStatus(env),
     timestamp: new Date().toISOString()
   }, result.ok ? 200 : 401);
 }
+
+async function handleAdminStatus(request, env) {
+  const result = await verifyAdmin(request, env);
+  if (!result.ok) {
+    return json({ ok: false, error: "UNAUTHORIZED", auth: publicAuthStatus(env) }, 401);
+  }
+  return json({
+    ok: true,
+    authenticated: true,
+    method: result.method,
+    admin: {
+      dashboardControls: "enabled",
+      discordShooter: "protected",
+      presets: "protected_on_post",
+      secretsExposed: false
+    },
+    discord: publicTargetStatus(env),
+    auth: publicAuthStatus(env),
+    timestamp: new Date().toISOString()
+  });
+}
+
+async function handleAdminProtectedTest(request, env) {
+  const body = request.method === "POST" ? await requestBody(request) : null;
+  const result = await verifyAdmin(request, env, body);
+  if (!result.ok) return json({ ok: false, error: "UNAUTHORIZED", auth: publicAuthStatus(env) }, 401);
+  return json({
+    ok: true,
+    message: "Admin/Auth protection is active.",
+    method: result.method,
+    timestamp: new Date().toISOString()
+  });
+}
+
+
+// ============================================================
+// PLAYER_ALERT_RENDER_BRIDGE_V1_1_3
+// Aus WebRadio-Code zerlegt und fuer RadioBotAI uebernommen.
+// Fallback-Reihenfolge: Render Backend -> KV -> Cloudflare Cache.
+// Zweck: Dashboard/Broadcast-Nachrichten als Backend-primary Relay.
+// ============================================================
+const PLAYER_ALERT_CACHE_KEY = "https://666radiobotai.local/player-alert/current";
+const PLAYER_ALERT_RATE_KEY = "https://666radiobotai.local/player-alert/rate";
+const PLAYER_ALERT_RATE_MS = 180000;
+const PLAYER_ALERT_KV_CURRENT_KEY = "player-alert:current";
+const PLAYER_ALERT_KV_RATE_KEY = "player-alert:rate";
+const PLAYER_ALERT_KV_HISTORY_KEY = "player-alert:history";
+
+function playerAlertCleanText(value, max = 240) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function playerAlertBackendUrl(env) {
+  const raw = (env && (env.PLAYER_ALERT_BACKEND_URL || env.RENDA_PLAYER_ALERT_URL || env.RENDER_PLAYER_ALERT_URL || env.RENDA_BACKEND_URL || env.RENDER_BACKEND_URL)) || "";
+  if (!raw) return "";
+  try {
+    const url = new URL(String(raw));
+    if (!/\/api\/player-alert\/?$/.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/\/$/, "") + "/api/player-alert";
+    }
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+async function playerAlertBackendFetch(env, path, init = {}) {
+  const base = playerAlertBackendUrl(env);
+  if (!base) return null;
+  const url = new URL(base);
+  url.pathname = url.pathname.replace(/\/$/, "") + path;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6500);
+  try {
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: { "content-type": "application/json", ...(init.headers || {}) },
+      ...init
+    });
+    clearTimeout(timer);
+    const textBody = await response.text().catch(() => "");
+    let data = null;
+    try { data = textBody ? JSON.parse(textBody) : null; } catch (_) {}
+    return { ok: response.ok, status: response.status, data: data || { text: textBody.slice(0, 1000) } };
+  } catch (error) {
+    clearTimeout(timer);
+    return { ok: false, status: 0, data: { ok: false, error: "backend_unreachable", detail: String(error?.message || error) } };
+  }
+}
+
+async function playerAlertKvGet(env, key) {
+  try { if (env && env.PLAYER_ALERT_KV) return await env.PLAYER_ALERT_KV.get(key, { type: "json" }); } catch (_) {}
+  return null;
+}
+
+async function playerAlertKvPut(env, key, value, ttl = 900) {
+  try {
+    if (env && env.PLAYER_ALERT_KV) {
+      await env.PLAYER_ALERT_KV.put(key, JSON.stringify(value), { expirationTtl: ttl });
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+async function playerAlertHistoryAppend(env, alert) {
+  const current = await playerAlertKvGet(env, PLAYER_ALERT_KV_HISTORY_KEY) || [];
+  const next = Array.isArray(current) ? current.slice(0, 19) : [];
+  next.unshift(alert);
+  await playerAlertKvPut(env, PLAYER_ALERT_KV_HISTORY_KEY, next, 86400);
+}
+
+async function playerAlertCacheGet(key) {
+  try {
+    const hit = await caches.default.match(new Request(key));
+    if (hit) return await hit.json();
+  } catch (_) {}
+  return null;
+}
+
+async function playerAlertCachePut(key, value, maxAge = 900) {
+  try {
+    await caches.default.put(new Request(key), new Response(JSON.stringify(value), {
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=" + String(maxAge) }
+    }));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function handlePlayerAlert(request, env) {
+  const url = new URL(request.url);
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: JSON_HEADERS });
+
+  if (pathname === "/render/status" && request.method === "GET") {
+    const backend = playerAlertBackendUrl(env);
+    const healthRoot = backend ? backend.replace(/\/api\/player-alert\/?$/, "/health") : "";
+    const health = healthRoot ? await safeFetchJson(healthRoot) : { ok: false, error: "PLAYER_ALERT_BACKEND_URL_not_configured" };
+    return json({
+      ok: true,
+      renderBackendConfigured: Boolean(backend),
+      backendBase: backend ? "[configured]" : "",
+      backendHealthOk: Boolean(health.ok),
+      backendHealthStatus: health.status || 0,
+      kvConfigured: Boolean(env && env.PLAYER_ALERT_KV),
+      mode: "backend-primary-kv-fallback-cache-tertiary",
+      routes: ["/api/player-alert/status", "/api/player-alert/send", "/api/player-alert/current", "/api/player-alert/history"],
+      note: "Backend URL value is not exposed. Configure PLAYER_ALERT_BACKEND_URL as Worker variable."
+    });
+  }
+
+  if (!pathname.startsWith("/api/player-alert")) return null;
+
+  if (pathname === "/api/player-alert/status" && request.method === "GET") {
+    const backend = await playerAlertBackendFetch(env, "/status", { method: "GET" });
+    return json({
+      ok: true,
+      backendConfigured: Boolean(playerAlertBackendUrl(env)),
+      backendOk: Boolean(backend && backend.ok),
+      backendStatus: backend ? backend.status : 0,
+      kvConfigured: Boolean(env && env.PLAYER_ALERT_KV),
+      mode: "backend-primary-kv-fallback-cache-tertiary",
+      source: backend && backend.ok ? "backend" : "worker-fallback-ready"
+    });
+  }
+
+  if (pathname === "/api/player-alert/current" && request.method === "GET") {
+    const backend = await playerAlertBackendFetch(env, "/current", { method: "GET" });
+    if (backend && backend.ok) return json({ source: "backend", ...backend.data });
+    const kv = await playerAlertKvGet(env, PLAYER_ALERT_KV_CURRENT_KEY);
+    if (kv) return json({ source: "kv-fallback", ...kv });
+    const cache = await playerAlertCacheGet(PLAYER_ALERT_CACHE_KEY);
+    if (cache) return json({ source: "cache-tertiary", ...cache });
+    return json({ ok: true, active: false, source: "none" });
+  }
+
+  if (pathname === "/api/player-alert/history" && request.method === "GET") {
+    const backend = await playerAlertBackendFetch(env, "/history", { method: "GET" });
+    if (backend && backend.ok) return json({ source: "backend", ...backend.data });
+    const kv = await playerAlertKvGet(env, PLAYER_ALERT_KV_HISTORY_KEY) || [];
+    return json({ ok: true, source: kv.length ? "kv-fallback" : "none", items: kv });
+  }
+
+  if (pathname === "/api/player-alert/send" && request.method === "POST") {
+    const body = await requestBody(request);
+    const auth = await verifyAdmin(request, env, body);
+    if (!auth.ok) return json({ ok: false, error: "UNAUTHORIZED", auth: publicAuthStatus(env) }, 401);
+
+    const message = playerAlertCleanText(body.message || body.text || body.content, 240);
+    const senderId = playerAlertCleanText(body.senderId || body.clientId || body.sender || "radiobotai-dashboard", 80) || "radiobotai-dashboard";
+    const username = playerAlertCleanText(body.username || body.name || "666 RadioBotAI", 28) || "666 RadioBotAI";
+    if (!message) return json({ ok: false, error: "empty_message" }, 400);
+
+    const now = Date.now();
+    const rate = (await playerAlertKvGet(env, PLAYER_ALERT_KV_RATE_KEY)) || (await playerAlertCacheGet(PLAYER_ALERT_RATE_KEY));
+    if (rate) {
+      const last = Number(rate.last || 0);
+      if (last && (now - last) < PLAYER_ALERT_RATE_MS) return json({ ok: false, error: "rate_limited", retryAfterMs: PLAYER_ALERT_RATE_MS - (now - last) }, 429);
+    }
+
+    const alert = {
+      ok: true,
+      active: true,
+      id: String(now) + "-" + Math.random().toString(36).slice(2, 8),
+      message,
+      username,
+      senderId,
+      clientId: senderId,
+      createdAt: new Date(now).toISOString(),
+      timestamp: now,
+      version: playerAlertCleanText(body.version || "v1.1.3", 40),
+      source: "666radiobotai-worker"
+    };
+
+    const backend = await playerAlertBackendFetch(env, "/send", { method: "POST", body: JSON.stringify(alert) });
+    if (backend && backend.ok) {
+      await playerAlertKvPut(env, PLAYER_ALERT_KV_RATE_KEY, { last: now }, 180);
+      return json({ ok: true, delivered: true, source: "backend", fallback: false, backendStatus: backend.status, data: backend.data });
+    }
+
+    const kvOk = await playerAlertKvPut(env, PLAYER_ALERT_KV_CURRENT_KEY, alert, 900);
+    if (kvOk) {
+      await playerAlertKvPut(env, PLAYER_ALERT_KV_RATE_KEY, { last: now }, 180);
+      await playerAlertHistoryAppend(env, alert);
+      return json({ source: "kv-fallback", backend: backend ? backend.data : null, ...alert });
+    }
+
+    await playerAlertCachePut(PLAYER_ALERT_CACHE_KEY, alert, 900);
+    await playerAlertCachePut(PLAYER_ALERT_RATE_KEY, { last: now }, 180);
+    return json({ source: "cache-tertiary", backend: backend ? backend.data : null, ...alert });
+  }
+
+  return json({ ok: false, error: "not_found", path: pathname }, 404);
+}
+// END PLAYER_ALERT_RENDER_BRIDGE_V1_1_3
 
 
 const FALLBACK_DISCORD_GATE_SHA256 = "911aa98122df056905093e0e83a4a0b0f304f32bcf2e69cf035347ddc8872cb0";
@@ -510,13 +887,14 @@ async function handleDiscordStatus(env) {
   return json({
     ok: true,
     addon: "RadioBotAI Direct Discord Shooter",
-    version: "v1.1.1",
+    version: "v1.1.3",
     mode: "direct-worker-webhook-dispatch",
     targets: publicTargetStatus(env),
     protection: {
       adminTokenEnabled: Boolean(env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN),
       gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256 || FALLBACK_DISCORD_GATE_SHA256),
-      adminAuthWorkerConfigured: Boolean(env.ADMIN_AUTH_VERIFY_URL)
+      adminAuthWorkerConfigured: Boolean(env.ADMIN_AUTH_VERIFY_URL || env.AUTH_VERIFY_URL),
+      passwordWorkerConfigured: Boolean(env.ADMIN_PASSWORD_VERIFY_URL || env.ADMIN_PW_VERIFY_URL || env.PASSWORD_VERIFY_URL || env.PW_VERIFY_URL)
     },
     runtime: {
       lastKind: DISCORD_RUNTIME.lastKind,
@@ -639,12 +1017,14 @@ function dashboardHtml(env) {
 </style>
 </head>
 <body>
-<header><div class="wrap"><div class="brand"><div class="logo">666</div><div><h1>${cfg.botName}</h1><p>Vocard Sovereign Dashboard · Cyberstream Cockpit · kein Chatbot, sondern WebRadio Voice Stream Control</p></div></div><nav><button class="tab active" data-tab="overview">Overview</button><button class="tab" data-tab="stream">Stream</button><button class="tab" data-tab="shooter">Discord Shooter</button><button class="tab" data-tab="admin">Admin/Auth</button><button class="tab" data-tab="vocard">Vocard Basis</button></nav></div></header>
+<header><div class="wrap"><div class="brand"><div class="logo">666</div><div><h1>${cfg.botName}</h1><p>Vocard Sovereign Dashboard · Cyberstream Cockpit · kein Chatbot, sondern WebRadio Voice Stream Control</p></div></div><nav><button class="tab active" data-tab="overview">Overview</button><button class="tab" data-tab="stream">Stream</button><button class="tab" data-tab="shooter">Discord Shooter</button><button class="tab" data-tab="broadcast">Broadcast Relay</button><button class="tab" data-tab="admin">Admin/Auth</button><button class="tab" data-tab="vocard">Vocard Basis</button></nav></div></header>
 <main class="wrap">
 <section id="overview" class="screen active"><div class="grid"><div class="card"><h2>Worker</h2><div class="row"><span>Status</span><span class="pill"><span id="workerLed" class="led"></span><span id="workerState">prüfe...</span></span></div><div class="row"><span>Version</span><span>${cfg.version}</span></div><div class="row"><span>Rolle</span><span class="muted">API / Dashboard / Bridge</span></div></div><div class="card"><h2>Radio</h2><div class="row"><span>Stream</span><span class="pill"><span id="radioLed" class="led"></span><span id="radioState">prüfe...</span></span></div><div class="row"><span>Now Playing</span><span id="npState" class="muted">warte...</span></div><div class="row"><span>TuneIn</span><a style="color:var(--cyan)" href="${cfg.tuneInUrl}" target="_blank">öffnen</a></div></div><div class="card"><h2>Discord Bot</h2><div class="row"><span>Typ</span><span>Voice Radio Bot</span></div><div class="row"><span>Commands</span><span>/play /stop /volume</span></div><div class="row"><span>Volume</span><span>0–200 · Default 100</span></div></div><div class="card wide"><h2>Now Playing</h2><div id="nowPlayingBox" class="code">lade...</div></div><div class="card"><h2>Quick Actions</h2><div class="controls"><button onclick="refreshAll()">Status aktualisieren</button><button onclick="postNowPlaying()">NowPlaying posten</button><button onclick="showTab('stream')">Stream hören</button></div></div></div></section>
 <section id="stream" class="screen"><div class="grid"><div class="card wide"><h2>Live Stream Preview</h2><audio controls src="${cfg.streamUrl}"></audio><div class="row"><span>Main Stream</span><span class="muted small">${cfg.streamUrl}</span></div><div class="row"><span>Fallback</span><span class="muted small">${cfg.fallbackStreamUrl}</span></div><p class="muted">Dieser Player ist nur Browser-Vorschau. Der Discord Voice Bot spielt separat im Voice Channel.</p></div><div class="card"><h2>Presets</h2><div class="controls"><button onclick="preset(1)">Preset 1</button><button onclick="preset(2)">Preset 2</button><button onclick="preset(3)">Preset 3</button><button onclick="preset(4)">Preset 4</button><button onclick="preset(5)">Preset 5</button></div><p class="muted small">Preset-Routen sind vorbereitet. Echte SonicPanel/AutoDJ-Schaltung bleibt geschützt.</p></div><div class="card full"><h2>Stream API Antwort</h2><div id="streamBox" class="code">-</div></div></div></section>
 <section id="shooter" class="screen"><div class="grid"><div class="card"><h2>Discord Shooter Status</h2><button onclick="discordStatus()">Status prüfen</button><div id="discordStatusBox" class="code">-</div></div><div class="card wide"><h2>Message senden</h2><label class="muted small">Ziel</label><select id="discordTarget"><option value="main">Main / Hauptkanal</option><option value="url2">URL2 / Secondary</option><option value="url3">URL3 / Channel 1510363693622497400</option><option value="all">Alle konfigurierten Ziele</option></select><textarea id="messageText" placeholder="Nachricht für Discord Shooter..."></textarea><div class="controls"><button onclick="sendMessage()">Message senden</button><button onclick="manualBroadcast()">Manual Broadcast</button><button onclick="postNowPlaying()">NowPlaying posten</button><button onclick="sendDiscordTest()">Test senden</button></div><p class="muted small">Dashboard ruft nur diesen Worker auf. Webhook-Secrets bleiben serverseitig. URL3 ist Channel 1510363693622497400.</p></div></div></section>
-<section id="admin" class="screen"><div class="grid"><div class="card wide"><h2>Admin / Gate</h2><p class="muted">Gate-Code oder Admin-Token wird nur im Browserfeld gehalten und als Header gesendet. Nicht in Repo oder Dashboard-Code speichern.</p><input id="gateCode" type="password" placeholder="Gate-Code oder Admin-Token eingeben"/><div class="controls"><button onclick="verifyAuth()">Auth prüfen</button><button onclick="clearGate()">Feld leeren</button></div><div id="authBox" class="code">-</div></div><div class="card"><h2>Schutzlogik</h2><div class="row"><span>Webhook im Frontend</span><span class="danger">Nein</span></div><div class="row"><span>Secrets sichtbar</span><span class="danger">Nein</span></div><div class="row"><span>Auth Worker</span><span class="muted">optional</span></div></div></div></section>
+
+<section id="broadcast" class="screen"><div class="grid"><div class="card"><h2>Renderer / Player Alert Status</h2><div class="controls"><button onclick="renderStatus()">Render Status</button><button onclick="playerAlertStatus()">Player Alert Status</button><button onclick="playerAlertCurrent()">Current</button><button onclick="playerAlertHistory()">History</button></div><div id="broadcastStatusBox" class="code">-</div></div><div class="card wide"><h2>Player Broadcast Relay</h2><textarea id="broadcastText" placeholder="Broadcast-Nachricht fuer Player Alert / Renderer Backend..."></textarea><div class="controls"><button onclick="sendPlayerAlert()">Player Alert senden</button></div><p class="muted small">Route aus WebRadio-Code uebernommen: Worker -> Render Backend -> KV -> Cache. Geschuetzt ueber Admin/Auth.</p></div></div></section>
+<section id="admin" class="screen"><div class="grid"><div class="card wide"><h2>Admin / Gate</h2><p class="muted">Gate-Code oder Admin-Token wird nur im Browserfeld gehalten und als Header gesendet. Nicht in Repo oder Dashboard-Code speichern.</p><input id="gateCode" type="password" placeholder="Gate-Code oder Admin-Token eingeben"/><div class="controls"><button onclick="verifyAuth()">Auth prüfen</button><button onclick="authStatus()">Auth Status</button><button onclick="adminStatus()">Admin Status</button><button onclick="adminTest()">Protected Test</button><button onclick="clearGate()">Feld leeren</button></div><div id="authBox" class="code">-</div></div><div class="card"><h2>Schutzlogik</h2><div class="row"><span>Webhook im Frontend</span><span class="danger">Nein</span></div><div class="row"><span>Secrets sichtbar</span><span class="danger">Nein</span></div><div class="row"><span>Auth Worker</span><span class="muted">optional</span></div></div></div></section>
 <section id="vocard" class="screen"><div class="grid"><div class="card full"><h2>Vocard Basis</h2><p>Die originale Vocard Dashboard-Struktur bleibt im Repo unter <b>Dashboard/Vocard-Dashboard-main</b> erhalten. Diese Cyberstream-Oberfläche ist die RadioBotAI-Erweiterung für Stream, Shooter, Status und Admin/Auth.</p><div class="row"><span>Dashboard Core</span><span>Vocard-Dashboard-main</span></div><div class="row"><span>Installer Core</span><span>Vocard-Installer-main</span></div><div class="row"><span>Bot Core</span><span>666-RadioBotAI</span></div><div class="row"><span>Worker Deploy</span><span>wrangler.toml → Arbeiter/src/index.js</span></div></div></div></section>
 </main>
 <script>
@@ -655,6 +1035,12 @@ function gateHeaders(){const v=$('gateCode')?.value||'';return v?{'x-discord-gat
 async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{'content-type':'application/json',...(opt.headers||{}),...gateHeaders()}});const t=await r.text();try{return JSON.parse(t)}catch(e){return {ok:r.ok,status:r.status,text:t}}}
 function show(el,data){$(el).textContent=typeof data==='string'?data:JSON.stringify(data,null,2)}
 function led(id,ok){const e=$(id);e.classList.remove('ok','bad');e.classList.add(ok?'ok':'bad')}
+
+async function renderStatus(){show('broadcastStatusBox',await api('/render/status'))}
+async function playerAlertStatus(){show('broadcastStatusBox',await api('/api/player-alert/status'))}
+async function playerAlertCurrent(){show('broadcastStatusBox',await api('/api/player-alert/current'))}
+async function playerAlertHistory(){show('broadcastStatusBox',await api('/api/player-alert/history'))}
+async function sendPlayerAlert(){show('broadcastStatusBox',await api('/api/player-alert/send',{method:'POST',body:JSON.stringify({message:$('broadcastText')?.value||'',senderId:'radiobotai-dashboard',version:'v1.1.3'})}))}
 async function refreshAll(){try{const s=await api('/status');show('nowPlayingBox',s);$('workerState').textContent=s.ok?'online':'error';led('workerLed',!!s.ok);$('radioState').textContent=s.radio?.healthOk?'online':'prüfen';led('radioLed',!!s.radio?.healthOk);$('npState').textContent=s.radio?.nowPlayingOk?'OK':'unbekannt'}catch(e){$('workerState').textContent='error';led('workerLed',false);show('nowPlayingBox',String(e))}}
 async function loadNow(){show('nowPlayingBox',await api('/nowplaying'))}
 async function loadStream(){show('streamBox',await api('/stream'))}
@@ -665,7 +1051,10 @@ async function sendMessage(){show('discordStatusBox',await api('/api/discord/mes
 async function manualBroadcast(){show('discordStatusBox',await api('/api/discord/manual',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),message:$('messageText').value||'666 RadioBotAI Manual Broadcast'})}))}
 async function postNowPlaying(){show('discordStatusBox',await api('/api/discord/nowplaying',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),kind:'nowplaying'})}))}
 async function sendDiscordTest(){show('discordStatusBox',await api('/api/discord/test',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),message:'666 RadioBotAI Test aus dem Dashboard'})}))}
-async function verifyAuth(){show('authBox',await api('/auth/verify'))}
+async function verifyAuth(){show('authBox',await api('/auth/verify',{method:'POST',body:JSON.stringify({gate:$('gateCode')?.value||''})}))}
+async function authStatus(){show('authBox',await api('/auth/status'))}
+async function adminStatus(){show('authBox',await api('/admin/status'))}
+async function adminTest(){show('authBox',await api('/admin/protected-test',{method:'POST',body:JSON.stringify({gate:$('gateCode')?.value||''})}))}
 function clearGate(){$('gateCode').value='';show('authBox','geleert')}
 refreshAll();loadStream();
 </script>
@@ -696,7 +1085,13 @@ export default {
     if (pathname === "/stream") return handleStream(env);
     if (pathname === "/dashboard") return handleDashboard(env);
     if (pathname === "/config/public") return json({ ok: true, config: getPublicConfig(env) });
+    if (pathname === "/auth/status") return handleAuthStatus(env);
     if (pathname === "/auth/verify") return handleAuthVerify(request, env);
+    if (pathname === "/admin/status") return handleAdminStatus(request, env);
+    if (pathname === "/admin/protected-test") return handleAdminProtectedTest(request, env);
+
+    const playerAlertResponse = await handlePlayerAlert(request, env);
+    if (playerAlertResponse) return playerAlertResponse;
 
     if (pathname === "/api/discord/status") return handleDiscordStatus(env);
     if (pathname === "/api/discord/debug") return handleDiscordDebug(env);

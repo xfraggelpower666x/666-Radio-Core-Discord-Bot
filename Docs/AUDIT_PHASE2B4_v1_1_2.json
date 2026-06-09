@@ -1,0 +1,27 @@
+{
+  "phase": "PHASE 2B-4",
+  "version": "v1.1.2",
+  "status": "UPLOAD_READY_TEST_REQUIRED",
+  "worker_syntax": "pending_node_check",
+  "secrets_exposed": false,
+  "added_routes": [
+    "/auth/status",
+    "/auth/verify",
+    "/admin/status",
+    "/admin/protected-test"
+  ],
+  "protected_routes": [
+    "POST /api/discord/*",
+    "POST /preset/1..5",
+    "/admin/status",
+    "/admin/protected-test"
+  ],
+  "next_tests": [
+    "/health",
+    "/status",
+    "/dashboard",
+    "/auth/status",
+    "/auth/verify",
+    "/admin/protected-test"
+  ]
+}

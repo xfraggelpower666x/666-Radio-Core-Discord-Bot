@@ -1,4 +1,4 @@
-# 666 RadioBotAI — Vocard Sovereign Root v1.1.1
+# 666 RadioBotAI — Vocard Sovereign Root v1.1.3
 
 Dieses Paket ist die Vocard-basierte RadioBotAI-Root-Struktur für die Repo `xfraggelpower666x/666RadioBotAI` auf Branch `666RadioBotAI`.
 
@@ -50,7 +50,7 @@ Erstellt: 2026-06-09 04:17 UTC
 Status: Upload-ready / kein Produktions-Freeze ohne Cloudflare-Test.
 
 
-## v1.1.1 — Direct Discord Shooter Update
+## v1.1.3 — Direct Discord Shooter Update
 
 Der Discord-Shooter läuft jetzt direkt im Worker `666radiobotai` und nutzt Cloudflare Secrets:
 
@@ -69,3 +69,16 @@ Dashboard-Endpunkte:
 - `POST /api/discord/test`
 
 Webhook-URLs werden niemals an das Frontend ausgegeben.
+
+## v1.1.3 Admin/Auth Deep Integration
+
+Dieser Stand ergänzt einen geschützten Admin-Bereich für Dashboard-Steuerfunktionen.
+
+Neue Routen:
+
+- `/auth/status`
+- `/auth/verify`
+- `/admin/status`
+- `/admin/protected-test`
+
+Geschützte Aktionen werden serverseitig geprüft. Das Frontend enthält keine Webhook-URLs, Tokens oder Passwörter.
