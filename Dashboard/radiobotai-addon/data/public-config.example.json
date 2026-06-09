@@ -1,0 +1,6 @@
+{
+  "botName": "666 RadioBotAI",
+  "dashboardBasis": "Vocard-Dashboard-main",
+  "stream": "https://webradio.666soundsdesign-broadcaster.com/stream",
+  "nowPlaying": "https://webradio.666soundsdesign-broadcaster.com/api/nowplaying"
+}

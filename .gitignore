@@ -1,0 +1,30 @@
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.wrangler/
+
+# Logs / Cache
+logs/
+*.log
+.cache/
+dist/
+build/
+coverage/
+
+# System / Archives
+.DS_Store
+Thumbs.db
+__MACOSX/
+._*
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz

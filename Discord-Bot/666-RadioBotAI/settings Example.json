@@ -1,0 +1,225 @@
+{
+    "token": "",
+    "client_id": 0,
+    "genius_token": "",
+    "mongodb_url": "mongodb://mongo:27017",
+    "mongodb_name": "radio_bot_ai",
+    "disable_update_check": true,
+    "nodes": {
+        "DEFAULT": {
+            "host": "lavalink",
+            "port": 2333,
+            "password": "youshallnotpass",
+            "secure": false,
+            "identifier": "DEFAULT",
+            "yt_ratelimit": {
+                "tokens": [],
+                "config": {
+                    "retry_time": 10800,
+                    "max_requests": 30
+                },
+                "strategy": "LoadBalance"
+            }
+        }
+    },
+    "prefix": null,
+    "activity": [
+        {
+            "type": "listening",
+            "name": "666SOUNDsDESIGn WebRadio",
+            "status": "online"
+        },
+        {
+            "type": "playing",
+            "name": "/radio play • /radio status",
+            "status": "online"
+        }
+    ],
+    "logging": {
+        "file": {
+            "path": "./logs",
+            "enable": true
+        },
+        "level": {
+            "discord": "INFO",
+            "radio_bot_ai": "INFO",
+            "ipc_client": "INFO",
+            "radio_bot_ai.db": "INFO",
+            "radio_bot_ai.language": "INFO",
+            "radio_bot_ai.ipc_client": "INFO"
+        },
+        "max_history": 30
+    },
+    "bot_access_user": [],
+    "embed_color": "0xff00cc",
+    "default_max_queue": 50,
+    "default_search_platform": "youtube",
+    "lyrics_platform": "lrclib",
+    "ipc_client": {
+        "host": "127.0.0.1",
+        "port": 8000,
+        "password": "",
+        "secure": false,
+        "enable": false
+    },
+    "timer_settings": {
+        "bot_activity_update": 600,
+        "inactive_player_cleanup": 1800,
+        "cache_cleanup": 43200
+    },
+    "playlist_settings": {
+        "max_playlists": 5,
+        "max_tracks_per_playlist": 500,
+        "default_playlist_name": "Radio Favourites"
+    },
+    "sources_settings": {
+        "youtube": {
+            "emoji": "▶️",
+            "color": "0xFF0000"
+        },
+        "spotify": {
+            "emoji": "🟢",
+            "color": "0x1DB954"
+        },
+        "soundcloud": {
+            "emoji": "🟠",
+            "color": "0xFF7700"
+        },
+        "twitch": {
+            "emoji": "🟣",
+            "color": "0x9B4AFF"
+        },
+        "others": {
+            "emoji": "📻",
+            "color": "0xff00cc"
+        }
+    },
+    "radio": {
+        "bot_name": "666 RadioBotAI",
+        "project_name": "666SOUNDsDESIGn WebRadio",
+        "stream_url": "",
+        "stream_title": "666SOUNDsDESIGn WebRadio Stream",
+        "default_voice_channel_id": 0,
+        "log_text_channel_id": 0,
+        "admin_role_id": 0,
+        "admin_role_name": "666 RadioBotAI Admin",
+        "allowed_role_ids": [],
+        "default_volume": 100,
+        "auto_reconnect": true,
+        "controller_info_button": true,
+        "volume_min": 0,
+        "volume_safe_max": 150,
+        "volume_max": 200
+    },
+    "default_controller": {
+        "embeds": {
+            "active": {
+                "description": "📻 **666 RadioBotAI LIVE**\n```@@track_name@@```\nStream: [Open](@@track_url@@) | DJ: @@dj@@",
+                "footer": {
+                    "text": "Queue: @@queue_length@@ | Dauer: @@track_duration@@ | Volume: @@volume@@%"
+                },
+                "image": "@@track_thumbnail@@",
+                "author": {
+                    "name": "666 RadioBotAI Controller | @@channel_name@@",
+                    "icon_url": "@@bot_icon@@"
+                },
+                "color": "@@track_color@@"
+            },
+            "inactive": {
+                "title": {
+                    "name": "666 RadioBotAI bereit"
+                },
+                "description": "Nutze `/radio play`, um den 666SOUNDsDESIGn WebRadio-Stream im Voice-Channel zu starten.\n`/radio info` zeigt die Bot-Informationen.",
+                "image": "https://i.imgur.com/dIFBwU7.png",
+                "color": "@@default_embed_color@@"
+            }
+        },
+        "buttons": [
+            {
+                "play-pause": {
+                    "states": {
+                        "pause": {
+                            "emoji": "⏸️",
+                            "label": "Pause"
+                        },
+                        "resume": {
+                            "emoji": "▶️",
+                            "label": "Resume"
+                        }
+                    }
+                },
+                "stop": {
+                    "emoji": "⏹️",
+                    "label": "Stop",
+                    "style": "red"
+                },
+                "radioinfo": {
+                    "emoji": "ℹ️",
+                    "label": "Info",
+                    "style": "blurple"
+                }
+            },
+            {
+                "volumedown": {
+                    "emoji": "🔉",
+                    "label": "Leiser"
+                },
+                "volumemute": {
+                    "states": {
+                        "mute": {
+                            "emoji": "🔇",
+                            "label": "Mute"
+                        },
+                        "muted": {
+                            "emoji": "🔈",
+                            "label": "Unmute"
+                        }
+                    }
+                },
+                "volumeup": {
+                    "emoji": "🔊",
+                    "label": "Lauter"
+                }
+            }
+        ]
+    },
+    "default_voice_status_template": "📻 666 RadioBotAI: @@track_name@@",
+    "cooldowns": {
+        "connect": [
+            2,
+            30
+        ],
+        "play": [
+            2,
+            15
+        ],
+        "radio play": [
+            2,
+            20
+        ],
+        "radio repair": [
+            1,
+            30
+        ]
+    },
+    "aliases": {
+        "connect": [
+            "join"
+        ],
+        "leave": [
+            "stop",
+            "bye"
+        ],
+        "play": [
+            "p"
+        ],
+        "view": [
+            "v"
+        ],
+        "radio": [
+            "r"
+        ]
+    },
+    "version": "v666-radiobotai-1.0.0",
+    "sync_commands_on_start": true
+}
