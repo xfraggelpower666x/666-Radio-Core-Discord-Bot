@@ -1,4 +1,0 @@
-﻿# GITHUB CONTEXT
-
-See ../GITHUB_CONTEXT.md.
-

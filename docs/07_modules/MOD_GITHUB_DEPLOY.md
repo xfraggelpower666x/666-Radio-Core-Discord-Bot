@@ -1,4 +1,0 @@
-﻿# MOD GITHUB DEPLOY
-
-See MOD-014 in ../MODULE_REGISTRY.md.
-

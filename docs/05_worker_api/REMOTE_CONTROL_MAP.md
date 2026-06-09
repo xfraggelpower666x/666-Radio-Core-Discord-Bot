@@ -1,4 +1,0 @@
-﻿# REMOTE CONTROL MAP
-
-See ../REMOTE_CONTROL_MAP.md.
-

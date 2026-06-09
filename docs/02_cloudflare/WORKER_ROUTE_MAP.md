@@ -1,4 +1,0 @@
-﻿# WORKER ROUTE MAP
-
-See ../WORKER_ROUTE_MAP.md.
-

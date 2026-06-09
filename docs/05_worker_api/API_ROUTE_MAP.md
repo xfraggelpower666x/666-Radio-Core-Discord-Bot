@@ -1,4 +1,0 @@
-﻿# API ROUTE MAP
-
-See ../API_ROUTE_MAP.md.
-

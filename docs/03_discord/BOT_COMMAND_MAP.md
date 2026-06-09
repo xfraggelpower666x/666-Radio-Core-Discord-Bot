@@ -1,4 +1,0 @@
-﻿# BOT COMMAND MAP
-
-See ../BOT_COMMAND_MAP.md.
-

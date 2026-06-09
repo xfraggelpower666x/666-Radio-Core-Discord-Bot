@@ -1,4 +1,0 @@
-﻿# MOD DISCORD BOT
-
-See MOD-001 in ../MODULE_REGISTRY.md.
-
