@@ -1,0 +1,23 @@
+{
+  "version": "v1.1.1",
+  "phase": "PHASE 2B-3D",
+  "status": "UPLOAD_READY",
+  "basis": "v1.1.0 Vocard Sovereign Root",
+  "source_logic": "WebRadio-666SOUNDsDESIGn worker-addons/discord-notify-addon-v3.js and docs for dual Discord webhook mapping",
+  "changes": [
+    "Direct Discord shooter dispatch added to 666radiobotai worker",
+    "DISCORD_WEBHOOK_URL main target",
+    "DISCORD_WEBHOOK_URL2 secondary target",
+    "DISCORD_WEBHOOK_URL3 mapped to channel ID 1510363693622497400",
+    "Dashboard target selector added",
+    "POST /api/discord/test added"
+  ],
+  "security": {
+    "secrets_in_frontend": false,
+    "webhook_values_exposed": false,
+    "real_tokens_in_zip": false,
+    "auth_required_for_send": true
+  },
+  "audit": "PASS_FOR_UPLOAD_HOLD_FOR_LIVE_DISCORD_TEST",
+  "freeze": "NO"
+}

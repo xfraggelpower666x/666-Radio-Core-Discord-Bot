@@ -1,4 +1,4 @@
-# 666 RadioBotAI — Vocard Sovereign Root v1.1.0
+# 666 RadioBotAI — Vocard Sovereign Root v1.1.1
 
 Dieses Paket ist die Vocard-basierte RadioBotAI-Root-Struktur für die Repo `xfraggelpower666x/666RadioBotAI` auf Branch `666RadioBotAI`.
 
@@ -48,3 +48,24 @@ Keine echten Tokens, Webhooks, Passwörter oder SonicPanel-Zugangsdaten in diese
 
 Erstellt: 2026-06-09 04:17 UTC
 Status: Upload-ready / kein Produktions-Freeze ohne Cloudflare-Test.
+
+
+## v1.1.1 — Direct Discord Shooter Update
+
+Der Discord-Shooter läuft jetzt direkt im Worker `666radiobotai` und nutzt Cloudflare Secrets:
+
+- `DISCORD_WEBHOOK_URL` = Main / Hauptkanal
+- `DISCORD_WEBHOOK_URL2` = Secondary / Dual-Discord-Ziel aus WebRadio-Logik
+- `DISCORD_WEBHOOK_URL3` = Channel-ID `1510363693622497400`
+- `PRIVATE_TRACK_SHOOTER` = optionaler NowPlaying-Mirror-Kompatibilitätsname
+
+Dashboard-Endpunkte:
+
+- `GET /api/discord/status`
+- `GET /api/discord/debug`
+- `POST /api/discord/message`
+- `POST /api/discord/manual`
+- `POST /api/discord/nowplaying`
+- `POST /api/discord/test`
+
+Webhook-URLs werden niemals an das Frontend ausgegeben.

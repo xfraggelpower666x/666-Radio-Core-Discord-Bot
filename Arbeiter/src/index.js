@@ -1,6 +1,6 @@
 // ============================================================
 // 666 RadioBotAI — Vocard Sovereign Dashboard Worker
-// Version: v1.1.0
+// Version: v1.1.1
 //
 // Zweck:
 // - Cloudflare Worker API fuer RadioBotAI
@@ -53,8 +53,8 @@ function getPublicConfig(env) {
   return {
     projectName: env.PUBLIC_PROJECT_NAME || "666SOUNDsDESIGn WebRadio",
     botName: env.PUBLIC_BOT_NAME || "666 RadioBotAI",
-    version: env.PUBLIC_VERSION || "v1.1.0",
-    role: env.PUBLIC_WORKER_ROLE || "RadioBotAI API / Vocard Dashboard Bridge",
+    version: env.PUBLIC_VERSION || "v1.1.1",
+    role: env.PUBLIC_WORKER_ROLE || "RadioBotAI API / Vocard Dashboard Bridge / Discord Shooter Control",
     webradioBaseUrl: base,
     streamUrl: env.PUBLIC_MAIN_STREAM_URL || `${base}/stream`,
     fallbackStreamUrl: env.PUBLIC_FALLBACK_STREAM_URL || `${base}/fallback-stream`,
@@ -74,6 +74,7 @@ function getPublicConfig(env) {
       "/api/discord/manual",
       "/api/discord/message",
       "/api/discord/nowplaying",
+      "/api/discord/test",
       "/auth/verify",
       "/preset/1",
       "/preset/2",
@@ -269,78 +270,360 @@ async function handleAuthVerify(request, env) {
   }, result.ok ? 200 : 401);
 }
 
+
+const FALLBACK_DISCORD_GATE_SHA256 = "911aa98122df056905093e0e83a4a0b0f304f32bcf2e69cf035347ddc8872cb0";
+const DISCORD_RUNTIME = globalThis.__S666_RADIOBOTAI_DISCORD_RUNTIME__ || {
+  lastOkAt: 0,
+  lastErrorAt: 0,
+  lastError: "",
+  lastKind: "idle",
+  lastTarget: "",
+  lastTrackKey: "",
+  lastTrackAt: 0
+};
+globalThis.__S666_RADIOBOTAI_DISCORD_RUNTIME__ = DISCORD_RUNTIME;
+
+async function sha256Hex(value) {
+  const data = new TextEncoder().encode(String(value || ""));
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function cleanText(value, fallback = "", max = 1200) {
+  return String(value ?? fallback)
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function normalizeDj(value) {
+  const fallback = "666 DJ";
+  const raw = cleanText(value, "", 160);
+  if (!raw) return fallback;
+  const lowered = raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!lowered) return fallback;
+  if (["unknown", "none", "n a", "na", "no dj", "nodj", "no dj status"].includes(lowered)) return fallback;
+  if (lowered.includes("auto dj") || lowered.includes("autodj") || lowered.includes("auto-dj")) return fallback;
+  return raw;
+}
+
+function discordTargets(env) {
+  return {
+    main: {
+      key: "main",
+      label: "Main / Hauptkanal",
+      envName: "DISCORD_WEBHOOK_URL",
+      webhook: env.DISCORD_WEBHOOK_URL || env.DISCORD_WEBHOOK || env.DISCORD_WEBHOOK_URI || env.DISCORD_WEBHOOK_ENDPOINT || env.WEBHOOK_URL || "",
+      channelId: null,
+      use: "manual, message, nowplaying"
+    },
+    url2: {
+      key: "url2",
+      label: "URL2 / Secondary",
+      envName: "DISCORD_WEBHOOK_URL2",
+      webhook: env.DISCORD_WEBHOOK_URL2 || "",
+      channelId: null,
+      use: "dual webhook / secondary channel from WebRadio docs"
+    },
+    url3: {
+      key: "url3",
+      label: "URL3 / Channel 1510363693622497400",
+      envName: "DISCORD_WEBHOOK_URL3",
+      webhook: env.DISCORD_WEBHOOK_URL3 || "",
+      channelId: "1510363693622497400",
+      use: "explicit mapped Discord channel"
+    },
+    privateTrack: {
+      key: "privateTrack",
+      label: "Private Track / NowPlaying Mirror",
+      envName: "PRIVATE_TRACK_SHOOTER",
+      webhook: env.PRIVATE_TRACK_SHOOTER || env.DISCORD_PRIVATE_TRACK_WEBHOOK_URL || env.DISCORD_PRIVATE_WEBHOOK_URL || env.DISCORD_RUBY_TRACK_WEBHOOK_URL || env.DISCORD_TRACK_PRIVATE_WEBHOOK || env.PRIVATE_DISCORD_WEBHOOK_URL || "",
+      channelId: null,
+      use: "optional nowplaying mirror compatibility"
+    }
+  };
+}
+
+function publicTargetStatus(env) {
+  const targets = discordTargets(env);
+  return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
+    key,
+    label: value.label,
+    envName: value.envName,
+    configured: Boolean(value.webhook),
+    channelId: value.channelId,
+    use: value.use
+  }]));
+}
+
+function selectDiscordTargets(env, requestedTarget, kind) {
+  const targets = discordTargets(env);
+  const target = cleanText(requestedTarget || "", "", 80);
+
+  if (target === "all") {
+    return [targets.main, targets.url2, targets.url3, targets.privateTrack].filter((x) => x.webhook);
+  }
+
+  if (target && targets[target]) {
+    return targets[target].webhook ? [targets[target]] : [];
+  }
+
+  if (kind === "nowplaying") {
+    // WebRadio-Logik: Hauptkanal + optionale Private-/Mirror-Ziele.
+    return [targets.main, targets.url2, targets.url3, targets.privateTrack].filter((x) => x.webhook);
+  }
+
+  // Manual/Message default: Hauptkanal.
+  return targets.main.webhook ? [targets.main] : [];
+}
+
+function trackKeyFromInput(input) {
+  const artist = cleanText(input.artist, "", 160).toLowerCase();
+  const title = cleanText(input.title || input.track, "", 240).toLowerCase();
+  const nowPlaying = cleanText(input.nowPlaying || input.now_playing || input.songtitle, "", 360).toLowerCase();
+  return `${artist}|${title}|${nowPlaying}`.replace(/\|+/g, "|").trim();
+}
+
+async function requestBody(request) {
+  try { return await request.json(); } catch (_) { return {}; }
+}
+
+function baseEmbedFields(input = {}, cfg = getPublicConfig({})) {
+  const artist = cleanText(input.artist, "", 160);
+  const title = cleanText(input.title || input.track, "", 220);
+  const nowPlaying = cleanText(input.nowPlaying || input.now_playing || input.songtitle, "", 360);
+  const dj = normalizeDj(input.dj || input.presenter || input.source);
+  const listener = cleanText(input.listeners || input.listenerCount || "", "", 80);
+  const bitrate = cleanText(input.bitrate || "", "", 80);
+
+  const fields = [];
+  if (nowPlaying || title || artist) fields.push({ name: "Now Playing", value: nowPlaying || [artist, title].filter(Boolean).join(" - ") || "Nicht eindeutig erkannt", inline: false });
+  fields.push({ name: "DJ / Source", value: dj, inline: true });
+  if (listener) fields.push({ name: "Listener", value: listener, inline: true });
+  if (bitrate) fields.push({ name: "Bitrate", value: bitrate, inline: true });
+  fields.push({ name: "Stream", value: cfg.streamUrl || "Stream nicht konfiguriert", inline: false });
+  return fields;
+}
+
+function messagePayload(input = {}, cfg = getPublicConfig({})) {
+  const message = cleanText(input.message || input.text || input.content, "666 RadioBotAI Message", 1800);
+  return {
+    username: "666 RadioBotAI",
+    embeds: [{
+      title: "💬 666 RadioBotAI — Dashboard Message",
+      description: message,
+      url: cfg.dashboardUrl || undefined,
+      color: 0x16fff3,
+      fields: baseEmbedFields(input, cfg),
+      footer: { text: "666SOUNDsDESIGn • RadioBotAI Discord Shooter" },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+function manualPayload(input = {}, cfg = getPublicConfig({})) {
+  const message = cleanText(input.message || input.text || input.content, "666 RadioBotAI Manual Broadcast", 1800);
+  return {
+    username: "666 RadioBotAI",
+    embeds: [{
+      title: "📡 666SOUNDsDESIGn WebRadio — Manual Broadcast",
+      description: message,
+      url: cfg.webradioBaseUrl,
+      color: 0xff2bd6,
+      fields: [
+        { name: "Live Stream", value: cfg.streamUrl, inline: false },
+        { name: "Dashboard", value: "https://666radiobotai.666soundsdesign-broadcaster.com/dashboard", inline: false },
+        { name: "TuneIn", value: cfg.tuneInUrl, inline: false }
+      ],
+      footer: { text: "666SOUNDsDESIGn • Cyberstream Cockpit" },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+async function nowPlayingPayload(input = {}, cfg = getPublicConfig({})) {
+  let merged = { ...input };
+  if (!merged.nowPlaying && !merged.title && !merged.track) {
+    const upstream = await safeFetchJson(cfg.nowPlayingUrl);
+    if (upstream.ok && upstream.data && typeof upstream.data === "object") {
+      merged = { ...upstream.data, ...merged };
+    }
+  }
+  return {
+    username: "666 RadioBotAI",
+    embeds: [{
+      title: "🎧 Now Playing — 666SOUNDsDESIGn WebRadio",
+      description: cleanText(merged.nowPlaying || merged.songtitle || merged.track || merged.title || "NowPlaying wurde angefordert.", "", 1800),
+      url: cfg.webradioBaseUrl,
+      color: 0x22f7ff,
+      fields: baseEmbedFields(merged, cfg),
+      footer: { text: "666SOUNDsDESIGn • Now Playing Mirror" },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+async function sendWebhook(target, payload) {
+  if (!target || !target.webhook) {
+    return { ok: false, target: target?.key || "unknown", configured: false, error: "webhook_not_configured" };
+  }
+  const response = await fetch(String(target.webhook), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const textBody = await response.text().catch(() => "");
+  return {
+    ok: response.ok,
+    target: target.key,
+    label: target.label,
+    envName: target.envName,
+    channelId: target.channelId,
+    status: response.status,
+    body: response.ok ? "OK" : textBody.slice(0, 300)
+  };
+}
+
+async function sendToDiscordTargets(env, targets, payload) {
+  const results = [];
+  for (const target of targets) {
+    try {
+      results.push(await sendWebhook(target, payload));
+    } catch (error) {
+      results.push({
+        ok: false,
+        target: target?.key || "unknown",
+        label: target?.label || "unknown",
+        envName: target?.envName || "",
+        channelId: target?.channelId || null,
+        error: String(error?.message || error)
+      });
+    }
+  }
+  const okCount = results.filter((x) => x.ok).length;
+  const failCount = results.length - okCount;
+  return { ok: okCount > 0 && failCount === 0, okCount, failCount, total: results.length, results };
+}
+
 async function handleDiscordStatus(env) {
-  const url = env.DISCORD_SHOOTER_STATUS_URL || `${env.PUBLIC_WEBRADIO_BASE_URL || "https://webradio.666soundsdesign-broadcaster.com"}/api/discord/status`;
-  const upstream = await safeFetchJson(url);
   return json({
     ok: true,
-    localBridge: "ready",
-    upstreamConfigured: !!url,
-    upstreamStatus: upstream,
-    secrets: {
-      discordAdminToken: !!env.DISCORD_ADMIN_TOKEN,
-      discordGateCode: !!env.DISCORD_GATE_CODE,
-      adminAuthVerifyUrl: !!env.ADMIN_AUTH_VERIFY_URL,
-      shooterManualUrl: !!env.DISCORD_SHOOTER_MANUAL_URL,
-      shooterMessageUrl: !!env.DISCORD_SHOOTER_MESSAGE_URL,
-      shooterNowPlayingUrl: !!env.DISCORD_SHOOTER_NOWPLAYING_URL
+    addon: "RadioBotAI Direct Discord Shooter",
+    version: "v1.1.1",
+    mode: "direct-worker-webhook-dispatch",
+    targets: publicTargetStatus(env),
+    protection: {
+      adminTokenEnabled: Boolean(env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN),
+      gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256 || FALLBACK_DISCORD_GATE_SHA256),
+      adminAuthWorkerConfigured: Boolean(env.ADMIN_AUTH_VERIFY_URL)
     },
-    note: "No secret values are exposed."
+    runtime: {
+      lastKind: DISCORD_RUNTIME.lastKind,
+      lastTarget: DISCORD_RUNTIME.lastTarget,
+      lastOkAt: DISCORD_RUNTIME.lastOkAt ? new Date(DISCORD_RUNTIME.lastOkAt).toISOString() : null,
+      lastErrorAt: DISCORD_RUNTIME.lastErrorAt ? new Date(DISCORD_RUNTIME.lastErrorAt).toISOString() : null,
+      lastError: DISCORD_RUNTIME.lastError || "",
+      lastTrackKey: DISCORD_RUNTIME.lastTrackKey ? "[set]" : ""
+    },
+    note: "Webhook values are never exposed."
   });
 }
 
 async function handleDiscordDebug(env) {
-  return json({
-    ok: true,
-    addon: "RadioBotAI Dashboard Shooter Bridge",
-    mode: "bridge-to-existing-webradio-shooter-if-configured",
-    secrets: {
-      DISCORD_ADMIN_TOKEN: !!env.DISCORD_ADMIN_TOKEN,
-      DISCORD_GATE_CODE: !!env.DISCORD_GATE_CODE,
-      ADMIN_AUTH_VERIFY_URL: !!env.ADMIN_AUTH_VERIFY_URL,
-      DISCORD_SHOOTER_STATUS_URL: !!env.DISCORD_SHOOTER_STATUS_URL,
-      DISCORD_SHOOTER_MANUAL_URL: !!env.DISCORD_SHOOTER_MANUAL_URL,
-      DISCORD_SHOOTER_MESSAGE_URL: !!env.DISCORD_SHOOTER_MESSAGE_URL,
-      DISCORD_SHOOTER_NOWPLAYING_URL: !!env.DISCORD_SHOOTER_NOWPLAYING_URL
-    }
-  });
+  return handleDiscordStatus(env);
 }
 
-async function proxyShooter(request, env, kind) {
-  const auth = await verifyAdmin(request, env);
+async function verifyDiscordAction(request, env) {
+  const admin = await verifyAdmin(request, env);
+  if (admin.ok) return admin;
+
+  // Compatibility with old WebRadio gate hash: if no explicit DISCORD_GATE_CODE is set,
+  // a known legacy hash can still validate the x-discord-gate-code header without exposing the code.
+  const providedGate = cleanText(request.headers.get("x-discord-gate-code") || "", "", 140);
+  if (providedGate) {
+    const expectedHash = String(env.DISCORD_GATE_SHA256 || FALLBACK_DISCORD_GATE_SHA256).trim().toLowerCase();
+    if ((await sha256Hex(providedGate)) === expectedHash) return { ok: true, method: "legacy-gate-hash" };
+  }
+
+  return { ok: false, method: "none" };
+}
+
+async function directDiscordShooter(request, env, kind) {
+  const auth = await verifyDiscordAction(request, env);
   if (!auth.ok) {
-    return json({ ok: false, error: "UNAUTHORIZED", note: "Admin token, gate code or auth worker verification required." }, 401);
+    DISCORD_RUNTIME.lastKind = "access-denied";
+    return json({
+      ok: false,
+      error: "UNAUTHORIZED",
+      note: "Admin token, gate code or auth worker verification required.",
+      targets: publicTargetStatus(env)
+    }, 401);
   }
 
-  const base = env.PUBLIC_WEBRADIO_BASE_URL || "https://webradio.666soundsdesign-broadcaster.com";
-  const urls = {
-    manual: env.DISCORD_SHOOTER_MANUAL_URL || `${base}/api/discord/manual`,
-    message: env.DISCORD_SHOOTER_MESSAGE_URL || `${base}/api/discord/message`,
-    nowplaying: env.DISCORD_SHOOTER_NOWPLAYING_URL || `${base}/api/discord/nowplaying`
-  };
-  const target = urls[kind];
-  if (!target) {
-    return json({ ok: false, error: "SHOOTER_TARGET_NOT_CONFIGURED", kind }, 500);
+  const cfg = getPublicConfig(env);
+  const input = await requestBody(request);
+  input.source = input.source || "666radiobotai-dashboard";
+  input.bridge = "666radiobotai-worker";
+  const requestedTarget = input.target || new URL(request.url).searchParams.get("target") || "";
+
+  let payload;
+  if (kind === "message") {
+    if (!cleanText(input.message || input.text || input.content, "", 1800)) {
+      return json({ ok: false, error: "message text missing" }, 400);
+    }
+    payload = messagePayload(input, cfg);
+  } else if (kind === "manual" || kind === "test") {
+    payload = manualPayload({
+      ...input,
+      message: input.message || input.text || input.content || (kind === "test" ? "666 RadioBotAI Testnachricht aus dem Dashboard." : "666 RadioBotAI Manual Broadcast")
+    }, cfg);
+  } else if (kind === "nowplaying") {
+    const key = trackKeyFromInput(input);
+    const now = Date.now();
+    if (key && key === DISCORD_RUNTIME.lastTrackKey && now - DISCORD_RUNTIME.lastTrackAt < 20000) {
+      DISCORD_RUNTIME.lastKind = "nowplaying-dedupe";
+      return json({ ok: true, skipped: true, reason: "duplicate track cooldown", led: "dedupe" });
+    }
+    DISCORD_RUNTIME.lastTrackKey = key;
+    DISCORD_RUNTIME.lastTrackAt = now;
+    payload = await nowPlayingPayload(input, cfg);
+  } else {
+    return json({ ok: false, error: "UNKNOWN_DISCORD_KIND", kind }, 400);
   }
 
-  let body = {};
-  try { body = await request.json(); } catch (_) {}
-  body.source = body.source || "666radiobotai-dashboard";
-  body.bridge = "666radiobotai-worker";
+  const targets = selectDiscordTargets(env, requestedTarget, kind);
+  if (!targets.length) {
+    return json({
+      ok: false,
+      error: "NO_CONFIGURED_TARGETS",
+      requestedTarget: requestedTarget || "(default)",
+      targets: publicTargetStatus(env)
+    }, 500);
+  }
 
-  const upstream = await safeFetchJson(target, {
-    method: "POST",
-    headers: forwardHeaders(request, env),
-    body: JSON.stringify(body)
-  });
+  const result = await sendToDiscordTargets(env, targets, payload);
+  DISCORD_RUNTIME.lastKind = kind;
+  DISCORD_RUNTIME.lastTarget = requestedTarget || (kind === "nowplaying" ? "auto-mirror" : "main");
+  if (result.ok) {
+    DISCORD_RUNTIME.lastOkAt = Date.now();
+    DISCORD_RUNTIME.lastError = "";
+  } else {
+    DISCORD_RUNTIME.lastErrorAt = Date.now();
+    DISCORD_RUNTIME.lastError = JSON.stringify(result.results.filter((x) => !x.ok)).slice(0, 800);
+  }
 
   return json({
-    ok: upstream.ok,
-    kind,
-    targetConfigured: true,
-    upstream,
-    timestamp: new Date().toISOString()
-  }, upstream.ok ? 200 : 502);
+    ok: result.ok,
+    type: kind,
+    requestedTarget: requestedTarget || "(default)",
+    auth: auth.method,
+    sent: result.okCount,
+    failed: result.failCount,
+    total: result.total,
+    results: result.results,
+    note: "No webhook URLs are exposed."
+  }, result.ok ? 200 : 502);
 }
 
 function dashboardHtml(env) {
@@ -360,7 +643,7 @@ function dashboardHtml(env) {
 <main class="wrap">
 <section id="overview" class="screen active"><div class="grid"><div class="card"><h2>Worker</h2><div class="row"><span>Status</span><span class="pill"><span id="workerLed" class="led"></span><span id="workerState">prüfe...</span></span></div><div class="row"><span>Version</span><span>${cfg.version}</span></div><div class="row"><span>Rolle</span><span class="muted">API / Dashboard / Bridge</span></div></div><div class="card"><h2>Radio</h2><div class="row"><span>Stream</span><span class="pill"><span id="radioLed" class="led"></span><span id="radioState">prüfe...</span></span></div><div class="row"><span>Now Playing</span><span id="npState" class="muted">warte...</span></div><div class="row"><span>TuneIn</span><a style="color:var(--cyan)" href="${cfg.tuneInUrl}" target="_blank">öffnen</a></div></div><div class="card"><h2>Discord Bot</h2><div class="row"><span>Typ</span><span>Voice Radio Bot</span></div><div class="row"><span>Commands</span><span>/play /stop /volume</span></div><div class="row"><span>Volume</span><span>0–200 · Default 100</span></div></div><div class="card wide"><h2>Now Playing</h2><div id="nowPlayingBox" class="code">lade...</div></div><div class="card"><h2>Quick Actions</h2><div class="controls"><button onclick="refreshAll()">Status aktualisieren</button><button onclick="postNowPlaying()">NowPlaying posten</button><button onclick="showTab('stream')">Stream hören</button></div></div></div></section>
 <section id="stream" class="screen"><div class="grid"><div class="card wide"><h2>Live Stream Preview</h2><audio controls src="${cfg.streamUrl}"></audio><div class="row"><span>Main Stream</span><span class="muted small">${cfg.streamUrl}</span></div><div class="row"><span>Fallback</span><span class="muted small">${cfg.fallbackStreamUrl}</span></div><p class="muted">Dieser Player ist nur Browser-Vorschau. Der Discord Voice Bot spielt separat im Voice Channel.</p></div><div class="card"><h2>Presets</h2><div class="controls"><button onclick="preset(1)">Preset 1</button><button onclick="preset(2)">Preset 2</button><button onclick="preset(3)">Preset 3</button><button onclick="preset(4)">Preset 4</button><button onclick="preset(5)">Preset 5</button></div><p class="muted small">Preset-Routen sind vorbereitet. Echte SonicPanel/AutoDJ-Schaltung bleibt geschützt.</p></div><div class="card full"><h2>Stream API Antwort</h2><div id="streamBox" class="code">-</div></div></div></section>
-<section id="shooter" class="screen"><div class="grid"><div class="card"><h2>Discord Shooter Status</h2><button onclick="discordStatus()">Status prüfen</button><div id="discordStatusBox" class="code">-</div></div><div class="card wide"><h2>Message senden</h2><textarea id="messageText" placeholder="Nachricht für Discord Shooter..."></textarea><div class="controls"><button onclick="sendMessage()">Message senden</button><button onclick="manualBroadcast()">Manual Broadcast</button><button onclick="postNowPlaying()">NowPlaying posten</button></div><p class="muted small">Dashboard ruft nur Worker-Routen auf. Webhook-Secrets bleiben serverseitig.</p></div></div></section>
+<section id="shooter" class="screen"><div class="grid"><div class="card"><h2>Discord Shooter Status</h2><button onclick="discordStatus()">Status prüfen</button><div id="discordStatusBox" class="code">-</div></div><div class="card wide"><h2>Message senden</h2><label class="muted small">Ziel</label><select id="discordTarget"><option value="main">Main / Hauptkanal</option><option value="url2">URL2 / Secondary</option><option value="url3">URL3 / Channel 1510363693622497400</option><option value="all">Alle konfigurierten Ziele</option></select><textarea id="messageText" placeholder="Nachricht für Discord Shooter..."></textarea><div class="controls"><button onclick="sendMessage()">Message senden</button><button onclick="manualBroadcast()">Manual Broadcast</button><button onclick="postNowPlaying()">NowPlaying posten</button><button onclick="sendDiscordTest()">Test senden</button></div><p class="muted small">Dashboard ruft nur diesen Worker auf. Webhook-Secrets bleiben serverseitig. URL3 ist Channel 1510363693622497400.</p></div></div></section>
 <section id="admin" class="screen"><div class="grid"><div class="card wide"><h2>Admin / Gate</h2><p class="muted">Gate-Code oder Admin-Token wird nur im Browserfeld gehalten und als Header gesendet. Nicht in Repo oder Dashboard-Code speichern.</p><input id="gateCode" type="password" placeholder="Gate-Code oder Admin-Token eingeben"/><div class="controls"><button onclick="verifyAuth()">Auth prüfen</button><button onclick="clearGate()">Feld leeren</button></div><div id="authBox" class="code">-</div></div><div class="card"><h2>Schutzlogik</h2><div class="row"><span>Webhook im Frontend</span><span class="danger">Nein</span></div><div class="row"><span>Secrets sichtbar</span><span class="danger">Nein</span></div><div class="row"><span>Auth Worker</span><span class="muted">optional</span></div></div></div></section>
 <section id="vocard" class="screen"><div class="grid"><div class="card full"><h2>Vocard Basis</h2><p>Die originale Vocard Dashboard-Struktur bleibt im Repo unter <b>Dashboard/Vocard-Dashboard-main</b> erhalten. Diese Cyberstream-Oberfläche ist die RadioBotAI-Erweiterung für Stream, Shooter, Status und Admin/Auth.</p><div class="row"><span>Dashboard Core</span><span>Vocard-Dashboard-main</span></div><div class="row"><span>Installer Core</span><span>Vocard-Installer-main</span></div><div class="row"><span>Bot Core</span><span>666-RadioBotAI</span></div><div class="row"><span>Worker Deploy</span><span>wrangler.toml → Arbeiter/src/index.js</span></div></div></div></section>
 </main>
@@ -377,9 +660,11 @@ async function loadNow(){show('nowPlayingBox',await api('/nowplaying'))}
 async function loadStream(){show('streamBox',await api('/stream'))}
 async function preset(n){show('streamBox',await api('/preset/'+n,{method:'POST',body:JSON.stringify({preset:n})}))}
 async function discordStatus(){show('discordStatusBox',await api('/api/discord/status'))}
-async function sendMessage(){show('discordStatusBox',await api('/api/discord/message',{method:'POST',body:JSON.stringify({message:$('messageText').value})}))}
-async function manualBroadcast(){show('discordStatusBox',await api('/api/discord/manual',{method:'POST',body:JSON.stringify({message:$('messageText').value||'666 RadioBotAI Manual Broadcast'})}))}
-async function postNowPlaying(){show('discordStatusBox',await api('/api/discord/nowplaying',{method:'POST',body:JSON.stringify({kind:'nowplaying'})}))}
+function selectedDiscordTarget(){return $('discordTarget') ? $('discordTarget').value : 'main'}
+async function sendMessage(){show('discordStatusBox',await api('/api/discord/message',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),message:$('messageText').value})}))}
+async function manualBroadcast(){show('discordStatusBox',await api('/api/discord/manual',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),message:$('messageText').value||'666 RadioBotAI Manual Broadcast'})}))}
+async function postNowPlaying(){show('discordStatusBox',await api('/api/discord/nowplaying',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),kind:'nowplaying'})}))}
+async function sendDiscordTest(){show('discordStatusBox',await api('/api/discord/test',{method:'POST',body:JSON.stringify({target:selectedDiscordTarget(),message:'666 RadioBotAI Test aus dem Dashboard'})}))}
 async function verifyAuth(){show('authBox',await api('/auth/verify'))}
 function clearGate(){$('gateCode').value='';show('authBox','geleert')}
 refreshAll();loadStream();
@@ -415,9 +700,10 @@ export default {
 
     if (pathname === "/api/discord/status") return handleDiscordStatus(env);
     if (pathname === "/api/discord/debug") return handleDiscordDebug(env);
-    if (pathname === "/api/discord/manual" && request.method === "POST") return proxyShooter(request, env, "manual");
-    if (pathname === "/api/discord/message" && request.method === "POST") return proxyShooter(request, env, "message");
-    if (pathname === "/api/discord/nowplaying" && request.method === "POST") return proxyShooter(request, env, "nowplaying");
+    if (pathname === "/api/discord/manual" && request.method === "POST") return directDiscordShooter(request, env, "manual");
+    if (pathname === "/api/discord/message" && request.method === "POST") return directDiscordShooter(request, env, "message");
+    if (pathname === "/api/discord/nowplaying" && request.method === "POST") return directDiscordShooter(request, env, "nowplaying");
+    if (pathname === "/api/discord/test" && request.method === "POST") return directDiscordShooter(request, env, "test");
 
     const presetMatch = pathname.match(/^\/preset\/([1-5])$/);
     if (presetMatch) return handlePreset(request, env, presetMatch[1]);

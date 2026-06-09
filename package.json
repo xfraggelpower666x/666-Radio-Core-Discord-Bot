@@ -1,6 +1,6 @@
 {
   "name": "666radiobotai-vocard-sovereign-root",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "666 RadioBotAI Vocard Sovereign Dashboard Worker Root",
   "private": true,
   "type": "module",
