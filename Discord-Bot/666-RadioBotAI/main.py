@@ -141,14 +141,18 @@ class RadioBotAI(commands.Bot):
             self.tree.translator.MISSING_TRANSLATOR.clear()
 
     async def on_ready(self):
-        func.logger.info("------------------")
-        func.logger.info(f"Logging As {self.user}")
-        func.logger.info(f"Bot ID: {self.user.id}")
-        func.logger.info("------------------")
-        func.logger.info(f"666 RadioBotAI Version: {update.__version__}")
-        func.logger.info(f"Discord Version: {discord.__version__}")
-        func.logger.info(f"Python Version: {sys.version}")
-        func.logger.info("------------------")
+        func.logger.info("══════════════════════════════════════════")
+        func.logger.info("  666 RadioBotAI — ONLINE")
+        func.logger.info("  Angetrieben von reiner Fraggle-DNA")
+        func.logger.info("  Creator: FRAGGELPOWER666")
+        func.logger.info("══════════════════════════════════════════")
+        func.logger.info(f"  Tag:     {self.user}")
+        func.logger.info(f"  Bot-ID:  {self.user.id}")
+        func.logger.info(f"  Version: {update.__version__}")
+        func.logger.info(f"  Discord: {discord.__version__}")
+        func.logger.info(f"  Python:  {sys.version.split()[0]}")
+        func.logger.info("  Fraggle DNA. Alive in the frequency.")
+        func.logger.info("══════════════════════════════════════════")
 
         bot_config.client_id = self.user.id
         LangHandler._local_langs.clear()
