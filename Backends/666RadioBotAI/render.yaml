@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: 666RadioBotAI-backend
+    env: python
+    plan: free
+    rootDir: Backends/666RadioBotAI
+    buildCommand: bash .render-build.sh
+    startCommand: uvicorn src.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MASTER_ADMIN_PASSWORD
+        sync: false
+      - key: MASTERING_BACKEND_TOKEN
+        sync: false
+      - key: MASTERING_BACKEND_URL
+        value: https://666sounds-mp3-mastering.onrender.com
+      - key: MASTERING_WORKER_URL
+        value: https://666soundsdesign-mp3-mastering.fraggelpower666.workers.dev
+      - key: SYSTEM_PW_WORKER_URL
+        value: https://system-pw-worker.fraggelpower666.workers.dev
