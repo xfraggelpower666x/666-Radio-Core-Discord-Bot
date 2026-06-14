@@ -638,30 +638,78 @@ bot.tree.add_command(philosophy_group)
 _alert_seen_ids: set[str] = set()
 
 
+def _find_best_text_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
+    """
+    Find the best text channel to post a dashboard alert into.
+
+    Priority:
+    1. Text channel in the same category as the voice channel where the bot is playing.
+    2. First sendable text channel in any category that has a voice channel with the bot.
+    3. Guild system channel.
+    4. ALERT_CHANNEL_ID fallback (if configured).
+    5. First sendable text channel in the guild.
+    """
+    # Is the bot in a voice channel in this guild?
+    bot_vc: Optional[discord.VoiceChannel] = None
+    if guild.voice_client and guild.voice_client.channel:
+        bot_vc = guild.voice_client.channel  # type: ignore
+
+    if bot_vc:
+        # 1. Text channels in the same category, prefer one with "radio", "musik", "bot" in name
+        category = bot_vc.category
+        if category:
+            text_channels = [c for c in category.channels if isinstance(c, discord.TextChannel) and c.permissions_for(guild.me).send_messages]
+            if text_channels:
+                preferred = next((c for c in text_channels if any(k in c.name.lower() for k in ("radio", "musik", "music", "bot", "chat", "allgemein", "general"))), None)
+                return preferred or text_channels[0]
+
+        # 2. No category — return first sendable text channel in guild
+        for c in guild.text_channels:
+            if c.permissions_for(guild.me).send_messages:
+                return c
+
+    # 3. System channel
+    if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+        return guild.system_channel
+
+    # 4. ALERT_CHANNEL_ID fallback
+    if ALERT_CHANNEL_ID:
+        ch = guild.get_channel(ALERT_CHANNEL_ID)
+        if isinstance(ch, discord.TextChannel) and ch.permissions_for(guild.me).send_messages:
+            return ch
+
+    # 5. First sendable text channel
+    for c in guild.text_channels:
+        if c.permissions_for(guild.me).send_messages:
+            return c
+
+    return None
+
+
 async def _post_alert_to_discord(alert: dict) -> None:
-    """Post a new dashboard/alert message into the configured Discord channel."""
-    if not ALERT_CHANNEL_ID:
-        return
-    channel = bot.get_channel(ALERT_CHANNEL_ID)
-    if not channel:
-        try:
-            channel = await bot.fetch_channel(ALERT_CHANNEL_ID)
-        except Exception:
-            return
-    sender = alert.get("senderId") or alert.get("clientId") or "Dashboard"
+    """Post a new dashboard/alert message into every guild the bot is active in."""
+    sender  = alert.get("senderId") or alert.get("clientId") or "Dashboard"
     message = alert.get("message", "")
     if not message:
         return
+
     e = discord.Embed(
         title="📡 Nachricht vom Dashboard",
         description=message,
         color=EMBED_COLOR,
     )
     e.set_footer(text=f"Von: {sender} · 666SOUNDsDESIGn Dashboard")
-    try:
-        await channel.send(embed=e)
-    except Exception as exc:
-        log.warning("Alert in Discord posten fehlgeschlagen: %s", exc)
+
+    for guild in bot.guilds:
+        channel = _find_best_text_channel(guild)
+        if not channel:
+            log.debug("Kein geeigneter Text-Channel in Guild %s gefunden", guild.name)
+            continue
+        try:
+            await channel.send(embed=e)
+            log.info("Dashboard-Alert in #%s (%s) gepostet", channel.name, guild.name)
+        except Exception as exc:
+            log.warning("Alert posten fehlgeschlagen (%s / #%s): %s", guild.name, channel.name, exc)
 
 
 @bot.event
