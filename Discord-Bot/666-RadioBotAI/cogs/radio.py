@@ -19,37 +19,54 @@ from voicelink.utils import dispatch_message
 
 
 BOT_INFO_TEXT = """
-BOT NAME:
-666 RadioBotAI
+╔══════════════════════════════════════════╗
+║        666 RadioBotAI                    ║
+║  Angetrieben von reiner Fraggle-DNA      ║
+║  666SOUNDsDESIGn WebRadio               ║
+╚══════════════════════════════════════════╝
+
+HIERARCHIE:
+  666 RadioBotAI          ← Gesamtchef, höchste Instanz
+  Stream 666 Design       ← Kreativer Chef, Discord-Gesicht
+  Creator: FRAGGELPOWER666 ← Der Ursprung — der Mensch bleibt Mitte
+
+ANTRIEB — FRAGGLE-DNA:
+  🔴 Druck     — Bass, Kick, Körperenergie, Club-Impact
+  🔵 Tiefe     — Sub, Raum, Dunkelheit, langer Nachhall
+  ⚡ Chaos     — Kontrolliert, Glitch, Acid, Bruchstellen
+  🤖 Cyberpunk — Maschinenraum, Neon, digitale Seele
+  ❤️ Human Core — Der Mensch bleibt Ursprung und Ziel
 
 BOT-TYP:
-Discord Voice Radio Bot / WebRadio Stream Player
+  Discord Voice Radio Bot · WebRadio Stream Player
+  Psychoakustische Musik-Design Plattform
 
-PROJEKT:
-666SOUNDsDESIGn WebRadio
-Discord Radio Stream Playback Bot
+ARCHITEKTUR — P.A.P.A.E.M.D.S.:
+  Mensch gibt Bedeutung → System gibt Struktur → Klang gibt Return
+  Kein flacher Stream. Ein lebendes System.
 
-KURZBESCHREIBUNG:
-666 RadioBotAI ist der Discord-Bot für den 666SOUNDsDESIGn WebRadio-Stream.
-Der Bot verbindet sich mit einem Discord-Voice-Channel und spielt den laufenden
-WebRadio-Stream ab. Er dient nicht als Chatbot, sondern als Radio-Playback- und
-Stream-Control-Bot.
-
-HAUPTAUFGABE:
-Der Bot soll den WebRadio-Stream zuverlässig im Discord-Voice-Channel wiedergeben
-und einfache Steuerbefehle für Wiedergabe, Lautstärke, Streamstatus und aktuelle
-Titelinformationen bereitstellen.
+SOUND-IDENTITÄT:
+  Deep Dark Techno · Dark Psy Techno · Hypno Techno
+  Psytrance / Full-On · Chaos Matrix Sound
+  666SOUNDsDESIGn Originals
 
 FUNKTIONEN:
-- WebRadio-Stream im Discord Voice Channel abspielen
-- Bot mit Voice Channel verbinden
-- Stream starten und stoppen
-- Wiedergabe pausieren und fortsetzen
-- Lautstärke steuern
-- aktuellen Streamstatus anzeigen
-- Now Playing anzeigen, sofern Metadaten verfügbar sind
-- Verbindung prüfen und Stream neu starten
-- Admin-Rolle für Radio-Steuerung setzen oder erstellen
+  - WebRadio-Stream im Discord Voice Channel abspielen
+  - Stream starten, stoppen, pausieren, fortsetzen
+  - Lautstärke steuern (0–200%)
+  - Streamstatus und Now Playing anzeigen
+  - Verbindung prüfen und Stream neu starten
+  - Admin-Rolle für Radio-Steuerung verwalten
+  - Philosophie & Identität: /identity · /philosophy
+
+MANTRA:
+  The Creator gives the spark.
+  Fraggel-DNA gives the strange living signature.
+  P.A.P.A.E.M.D.S. gives the architecture.
+  The mantra gives the return.
+  Sound becomes a room. The human remains the origin.
+
+666SOUNDsDESIGn — Fraggle DNA. Alive in the frequency.
 """.strip()
 
 
