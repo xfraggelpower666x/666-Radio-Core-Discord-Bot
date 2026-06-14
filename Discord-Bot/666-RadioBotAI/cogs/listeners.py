@@ -200,5 +200,14 @@ class Listeners(commands.Cog):
                 "isJoined": is_joined
             })
 
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        """Begrüßt neue Member mit Fraggle-DNA Identität — wird vom Identity-Cog übernommen."""
+        # Delegiert an Identity-Cog falls geladen, sonst kein doppelter Gruß
+        identity_cog = self.bot.get_cog("Identity")
+        if identity_cog:
+            await identity_cog.on_member_join(member)
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Listeners(bot))
