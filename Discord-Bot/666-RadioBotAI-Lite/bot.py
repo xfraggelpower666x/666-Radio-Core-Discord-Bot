@@ -33,25 +33,33 @@ EMBED_COLOR                 = 0xFF00CC
 PRESETS_FILE                = "presets.json"
 WEBRADIO_URL                = "https://webradio.666soundsdesign-broadcaster.com"
 
-# ── Stream Preset URLs (Render ENV-Vars) ─────────────────────────────────────────
-# Setze diese Variablen in Render → Environment:
-#   STREAM_MAIN_URL      → Hauptstream
-#   STREAM_BACKUP_URL    → Backupstream / Backstream
-#   STREAM_HEALING_URL   → Healing / Recovery-Modus
-#   STREAM_THE_BACK_URL  → The Back (separater Preset)
+# ── Stream Preset URLs (Render ENV-Vars mit echten Fallback-URLs) ─────────────────
+# ENV-Vars setzen in Render → Environment (überschreiben die Defaults):
+#   STREAM_MAIN_URL          → Hauptstream
+#   STREAM_BACKUP_URL        → Backupstream / Backstream
+#   STREAM_BACKUP_ALT_URL    → Backupstream Alt (Fallback)
+#   STREAM_DOMAIN_STREAM_URL → Domain Stream via Cloudflare
+#   STREAM_HEALING_URL       → Healing / Recovery-Modus (noch Platzhalter)
+#   STREAM_THE_BACK_URL      → The Back (noch Platzhalter)
 # STREAM_URL bleibt als Fallback für STREAM_MAIN_URL (Rückwärtskompatibilität)
-_STREAM_MAIN_URL     = os.getenv("STREAM_MAIN_URL")    or os.getenv("STREAM_URL", "")
-_STREAM_BACKUP_URL   = os.getenv("STREAM_BACKUP_URL",  "")
-_STREAM_HEALING_URL  = os.getenv("STREAM_HEALING_URL", "")
-_STREAM_THE_BACK_URL = os.getenv("STREAM_THE_BACK_URL","")
-STREAM_URL           = _STREAM_MAIN_URL  # Rückwärtskompatibilität
+_STREAM_MAIN_URL          = os.getenv("STREAM_MAIN_URL")          or os.getenv("STREAM_URL", "https://my.idjstream.com/666soundsdesign/stream")
+_STREAM_BACKUP_URL        = os.getenv("STREAM_BACKUP_URL",        "https://my.idjstream.com:8686/stream")
+_STREAM_BACKUP_ALT_URL    = os.getenv("STREAM_BACKUP_ALT_URL",    "https://my.idjstream.com/8686/stream")
+_STREAM_DOMAIN_STREAM_URL = os.getenv("STREAM_DOMAIN_STREAM_URL", "https://webradio.666soundsdesign-broadcaster.com/stream")
+_STREAM_HEALING_URL       = os.getenv("STREAM_HEALING_URL",       "")   # TODO: echte URL eintragen
+_STREAM_THE_BACK_URL      = os.getenv("STREAM_THE_BACK_URL",      "")   # TODO: echte URL eintragen
+STREAM_URL                = _STREAM_MAIN_URL  # Rückwärtskompatibilität
+WEBRADIO_PLAYER_URL       = "https://webradio.666soundsdesign-broadcaster.com"
+TUNEIN_URL                = "https://tunein.com/radio/s357001"
 
 # Preset-Metadaten: id → (label, url, emoji, beschreibung)
 _PRESET_META: dict[str, tuple[str, str, str, str]] = {
-    "main":    ("Hauptstream",  _STREAM_MAIN_URL,     "🔴", "Hauptstream / MAIN"),
-    "backup":  ("Backupstream", _STREAM_BACKUP_URL,   "🟡", "Backup-/Backstream"),
-    "healing": ("Healing",      _STREAM_HEALING_URL,  "🩵", "Healing / Recovery-Modus"),
-    "theback": ("The Back",     _STREAM_THE_BACK_URL, "🟣", "The Back — separater Preset-Modus"),
+    "main":          ("Hauptstream",     _STREAM_MAIN_URL,          "🔴", "Hauptstream / MAIN — idjstream.com"),
+    "backup":        ("Backupstream",    _STREAM_BACKUP_URL,        "🟡", "Backup-/Backstream — Port 8686"),
+    "backup_alt":    ("Backup Alt",      _STREAM_BACKUP_ALT_URL,    "🟠", "Backupstream Alt — Fallback"),
+    "domain_stream": ("Domain Stream",   _STREAM_DOMAIN_STREAM_URL, "🌐", "Stream via Cloudflare Domain"),
+    "healing":       ("Healing",         _STREAM_HEALING_URL,       "🩵", "Healing / Recovery-Modus (Platzhalter)"),
+    "theback":       ("The Back",        _STREAM_THE_BACK_URL,      "🟣", "The Back — separater Preset-Modus (Platzhalter)"),
 }
 
 # ── Built-in Presets (für /preset liste / /play) ─────────────────────────────────
