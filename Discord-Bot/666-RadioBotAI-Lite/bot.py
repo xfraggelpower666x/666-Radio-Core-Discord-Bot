@@ -24,7 +24,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 log = logging.getLogger("radiobotai")
 
 DISCORD_TOKEN               = os.getenv("DISCORD_TOKEN", "")
-STREAM_URL                  = os.getenv("STREAM_URL", "")
 API_BASE_URL                = os.getenv("API_BASE_URL", "").rstrip("/")
 ALERT_API_URL               = os.getenv("ALERT_API_URL", "").rstrip("/")
 ALERT_CHANNEL_ID            = int(os.getenv("ALERT_CHANNEL_ID", "0") or "0")
@@ -32,14 +31,33 @@ DEFAULT_VOICE_CHANNEL_ID    = int(os.getenv("DEFAULT_VOICE_CHANNEL_ID", "0") or 
 WELCOME_CHANNEL_ID          = int(os.getenv("DISCORD_WELCOME_CHANNEL_ID", "0") or "0")
 EMBED_COLOR                 = 0xFF00CC
 PRESETS_FILE                = "presets.json"
+WEBRADIO_URL                = "https://webradio.666soundsdesign-broadcaster.com"
 
-# ── Built-in Presets ────────────────────────────────────────────────────────────
+# ── Stream Preset URLs (Render ENV-Vars) ─────────────────────────────────────────
+# Setze diese Variablen in Render → Environment:
+#   STREAM_MAIN_URL      → Hauptstream
+#   STREAM_BACKUP_URL    → Backupstream / Backstream
+#   STREAM_HEALING_URL   → Healing / Recovery-Modus
+#   STREAM_THE_BACK_URL  → The Back (separater Preset)
+# STREAM_URL bleibt als Fallback für STREAM_MAIN_URL (Rückwärtskompatibilität)
+_STREAM_MAIN_URL     = os.getenv("STREAM_MAIN_URL")    or os.getenv("STREAM_URL", "")
+_STREAM_BACKUP_URL   = os.getenv("STREAM_BACKUP_URL",  "")
+_STREAM_HEALING_URL  = os.getenv("STREAM_HEALING_URL", "")
+_STREAM_THE_BACK_URL = os.getenv("STREAM_THE_BACK_URL","")
+STREAM_URL           = _STREAM_MAIN_URL  # Rückwärtskompatibilität
+
+# Preset-Metadaten: id → (label, url, emoji, beschreibung)
+_PRESET_META: dict[str, tuple[str, str, str, str]] = {
+    "main":    ("Hauptstream",  _STREAM_MAIN_URL,     "🔴", "Hauptstream / MAIN"),
+    "backup":  ("Backupstream", _STREAM_BACKUP_URL,   "🟡", "Backup-/Backstream"),
+    "healing": ("Healing",      _STREAM_HEALING_URL,  "🩵", "Healing / Recovery-Modus"),
+    "theback": ("The Back",     _STREAM_THE_BACK_URL, "🟣", "The Back — separater Preset-Modus"),
+}
+
+# ── Built-in Presets (für /preset liste / /play) ─────────────────────────────────
+# Nur Presets mit konfigurierter URL werden als aktiv gelistet.
 DEFAULT_PRESETS: dict[str, str] = {
-    "666sounds": STREAM_URL,
-    "soma-groovesalad": "https://ice1.somafm.com/groovesalad-256-mp3",
-    "soma-dronezone":   "https://ice1.somafm.com/dronezone-256-mp3",
-    "di-trance":        "https://di.fm/trance",
-    "laut-psytrance":   "https://laut.fm/psytrance",
+    k: v[1] for k, v in _PRESET_META.items() if v[1]
 }
 
 
@@ -436,10 +454,23 @@ preset_group = app_commands.Group(name="preset", description="Radio-Stream Prese
 
 @preset_group.command(name="list", description="Zeigt alle gespeicherten Stream-Presets")
 async def preset_list(interaction: discord.Interaction):
-    if not PRESETS:
-        return await interaction.response.send_message("Keine Presets gespeichert.", ephemeral=True)
-    lines = [f"• `{name}` — {url}" for name, url in PRESETS.items()]
-    e = radio_embed("📻 Stream-Presets", "\n".join(lines))
+    e = radio_embed("📻 666SOUNDsDESIGn Stream-Presets")
+    # Built-in 666SOUNDs presets
+    for pid, (label, url, emoji, desc) in _PRESET_META.items():
+        status = f"`{url}`" if url else "⚠️ *Noch nicht konfiguriert — ENV fehlt*"
+        e.add_field(name=f"{emoji} {label} (`{pid}`)", value=f"{desc}\n{status}", inline=False)
+    # Custom user-added presets
+    custom = {k: v for k, v in PRESETS.items() if k not in _PRESET_META}
+    if custom:
+        e.add_field(name="─── Eigene Presets ───", value="\u200b", inline=False)
+        for name, url in custom.items():
+            e.add_field(name=f"• `{name}`", value=url, inline=False)
+    e.add_field(
+        name="🌐 WebRadio",
+        value=f"[{WEBRADIO_URL}]({WEBRADIO_URL})",
+        inline=False,
+    )
+    e.set_footer(text="ENV setzen in Render: STREAM_MAIN_URL · STREAM_BACKUP_URL · STREAM_HEALING_URL · STREAM_THE_BACK_URL")
     await interaction.response.send_message(embed=e, ephemeral=True)
 
 
@@ -531,16 +562,32 @@ async def radio_np(interaction: discord.Interaction):
 async def radio_status(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     s = await api_get("/stream/status")
-    e = radio_embed("666 RadioBotAI Status")
-    e.add_field(name="Voice", value=(f"▶️ {player.voice_client.channel.mention}" if player.is_connected() else "Nicht verbunden"), inline=False)
-    e.add_field(name="Playback", value="▶️ Läuft" if player.is_playing() else "⏹️ Stop", inline=True)
-    e.add_field(name="Volume", value=f"`{int(player.volume*100)}%`", inline=True)
+    e = radio_embed("⚡ 666 RadioBotAI — System Status")
+
+    # Voice / Playback
+    e.add_field(name="🎙️ Voice",    value=(f"▶️ {player.voice_client.channel.mention}" if player.is_connected() else "Nicht verbunden"), inline=True)
+    e.add_field(name="▶️ Playback", value="▶️ Läuft" if player.is_playing() else "⏹️ Stop", inline=True)
+    e.add_field(name="🔊 Volume",   value=f"`{int(player.volume*100)}%`", inline=True)
+
     if player.current_name:
-        e.add_field(name="Preset", value=f"`{player.current_name}`", inline=True)
+        e.add_field(name="📻 Aktives Preset", value=f"`{player.current_name}`", inline=False)
+
+    # Stream-Status vom API
     if s:
-        e.add_field(name="Stream", value="🟢 Online" if s.get("isOnline") else "🔴 Offline", inline=False)
-        e.add_field(name="Song", value=f"`{s.get('currentSong') or '—'}`", inline=False)
-        e.add_field(name="Hörer", value=f"`{s.get('listeners',0)}`", inline=True)
+        e.add_field(name="🌐 Stream",   value="🟢 Online" if s.get("isOnline") else "🔴 Offline", inline=True)
+        e.add_field(name="👥 Hörer",    value=f"`{s.get('listeners', 0)}`", inline=True)
+        e.add_field(name="🎚️ Bitrate",  value=f"`{s.get('bitrate', '—')} kbps`", inline=True)
+        e.add_field(name="🎵 Song",     value=f"`{s.get('currentSong') or '—'}`", inline=False)
+
+    # Preset-Konfigurationsstatus
+    preset_lines = []
+    for pid, (label, url, emoji, _) in _PRESET_META.items():
+        state = "✅" if url else "⚠️"
+        preset_lines.append(f"{state} {emoji} **{label}** (`{pid}`)")
+    e.add_field(name="📋 Preset-Konfiguration", value="\n".join(preset_lines), inline=False)
+
+    e.add_field(name="🌐 WebRadio", value=f"[{WEBRADIO_URL}]({WEBRADIO_URL})", inline=False)
+    e.set_footer(text="666SOUNDsDESIGn · Fraggle DNA. Alive in the frequency.")
     await interaction.followup.send(embed=e, ephemeral=True)
 
 
@@ -551,22 +598,86 @@ async def radio_volume(interaction: discord.Interaction, value: app_commands.Ran
     await interaction.response.send_message(embed=radio_embed("🔊 Volume", f"`{value}%`"), ephemeral=True)
 
 
-@radio_group.command(name="repair", description="Stream neu starten")
+@radio_group.command(name="repair", description="Stream neu starten (Repair / Reconnect)")
 async def radio_repair(interaction: discord.Interaction):
     await interaction.response.defer()
-    url = player.current_url or STREAM_URL
+    url  = player.current_url or _STREAM_MAIN_URL
+    name = player.current_name or "Hauptstream"
     if not url:
-        return await interaction.followup.send("⚠️ Keine Stream-URL.", ephemeral=True)
+        return await interaction.followup.send("⚠️ Keine Stream-URL konfiguriert (STREAM_MAIN_URL fehlt).", ephemeral=True)
     vc = player.voice_client.channel if player.is_connected() else await _resolve_vc(interaction)
     if not vc:
         return await interaction.followup.send("⚠️ Kein Voice-Channel.", ephemeral=True)
     await player.stop()
     await asyncio.sleep(1)
     try:
-        await player.play_stream(vc, url, player.current_name or "Stream")
+        await player.play_stream(vc, url, name)
     except Exception as exc:
         return await interaction.followup.send(f"❌ `{exc}`", ephemeral=True)
-    await interaction.followup.send(embed=radio_embed("🛠️ Repair", f"Neugestartet in {vc.mention}"))
+    await interaction.followup.send(embed=radio_embed("🔄 Reconnect", f"**{name}** neu gestartet in {vc.mention}"))
+
+
+@radio_group.command(name="reconnect", description="Aktuellen Stream kontrolliert neu verbinden")
+async def radio_reconnect(interaction: discord.Interaction):
+    """Alias for repair — reconnects the current stream without changing preset."""
+    await radio_repair.callback(radio_repair, interaction)
+
+
+@radio_group.command(name="reset", description="Player-Status zurücksetzen (kein Stream-Start)")
+async def radio_reset(interaction: discord.Interaction):
+    """Resets player state cleanly — stops stream, clears status, stays in channel."""
+    await interaction.response.defer()
+    was_playing = player.is_playing()
+    was_connected = player.is_connected()
+    channel_mention = player.voice_client.channel.mention if was_connected else "–"
+    await player.stop()
+    # Don't leave the channel — just stop playback and clear state
+    e = radio_embed("🔁 Reset", "Player-Status zurückgesetzt.")
+    e.add_field(name="War aktiv",     value="Ja" if was_playing else "Nein", inline=True)
+    e.add_field(name="Voice-Channel", value=channel_mention,                 inline=True)
+    e.add_field(
+        name="Nächste Schritte",
+        value=f"• `/play` — Hauptstream starten\n• `/radio reconnect` — Letzten Stream wiederherstellen\n• `/preset play main` — Explizit MAIN starten",
+        inline=False,
+    )
+    e.set_footer(text="Keine Config, keine Presets, keine ENV-Vars wurden verändert.")
+    await interaction.followup.send(embed=e)
+
+
+@radio_group.command(name="main", description="Sofort auf Hauptstream schalten (MAIN)")
+async def radio_main(interaction: discord.Interaction):
+    """Quick-switch to MAIN preset — H-Button equivalent."""
+    await interaction.response.defer()
+    if not _STREAM_MAIN_URL:
+        return await interaction.followup.send("⚠️ STREAM_MAIN_URL nicht konfiguriert.", ephemeral=True)
+    vc = player.voice_client.channel if player.is_connected() else await _resolve_vc(interaction)
+    if not vc:
+        return await interaction.followup.send("⚠️ Geh in einen Voice-Channel.", ephemeral=True)
+    await player.stop()
+    await asyncio.sleep(0.5)
+    try:
+        await player.play_stream(vc, _STREAM_MAIN_URL, "Hauptstream")
+    except Exception as exc:
+        return await interaction.followup.send(f"❌ `{exc}`", ephemeral=True)
+    await interaction.followup.send(embed=radio_embed("🔴 MAIN", f"Hauptstream läuft in {vc.mention}"))
+
+
+@radio_group.command(name="backup", description="Sofort auf Backupstream schalten (BACKUP)")
+async def radio_backup(interaction: discord.Interaction):
+    """Quick-switch to BACKUP preset — B-Button equivalent."""
+    await interaction.response.defer()
+    if not _STREAM_BACKUP_URL:
+        return await interaction.followup.send("⚠️ STREAM_BACKUP_URL nicht konfiguriert.", ephemeral=True)
+    vc = player.voice_client.channel if player.is_connected() else await _resolve_vc(interaction)
+    if not vc:
+        return await interaction.followup.send("⚠️ Geh in einen Voice-Channel.", ephemeral=True)
+    await player.stop()
+    await asyncio.sleep(0.5)
+    try:
+        await player.play_stream(vc, _STREAM_BACKUP_URL, "Backupstream")
+    except Exception as exc:
+        return await interaction.followup.send(f"❌ `{exc}`", ephemeral=True)
+    await interaction.followup.send(embed=radio_embed("🟡 BACKUP", f"Backupstream läuft in {vc.mention}"))
 
 
 @radio_group.command(name="history", description="Zuletzt gespielte Songs")
