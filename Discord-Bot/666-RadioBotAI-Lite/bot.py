@@ -26,6 +26,8 @@ log = logging.getLogger("radiobotai")
 DISCORD_TOKEN               = os.getenv("DISCORD_TOKEN", "")
 STREAM_URL                  = os.getenv("STREAM_URL", "")
 API_BASE_URL                = os.getenv("API_BASE_URL", "").rstrip("/")
+ALERT_API_URL               = os.getenv("ALERT_API_URL", "").rstrip("/")
+ALERT_CHANNEL_ID            = int(os.getenv("ALERT_CHANNEL_ID", "0") or "0")
 DEFAULT_VOICE_CHANNEL_ID    = int(os.getenv("DEFAULT_VOICE_CHANNEL_ID", "0") or "0")
 WELCOME_CHANNEL_ID          = int(os.getenv("DISCORD_WELCOME_CHANNEL_ID", "0") or "0")
 EMBED_COLOR                 = 0xFF00CC
@@ -286,6 +288,7 @@ async def on_ready():
         log.info("  Slash-Commands: %d synced", len(synced))
     except Exception as e:
         log.error("  Sync failed: %s", e)
+    asyncio.create_task(_messenger_poll_loop())
 
 
 @bot.event
@@ -625,6 +628,136 @@ for _key, _data in PHILOSOPHY_TOPICS.items():
     )
 
 bot.tree.add_command(philosophy_group)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MESSENGER — Dashboard ↔ Discord via Player Alert Relay
+# Env-Vars: ALERT_API_URL, ALERT_CHANNEL_ID
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_alert_seen_ids: set[str] = set()
+
+
+async def _post_alert_to_discord(alert: dict) -> None:
+    """Post a new dashboard/alert message into the configured Discord channel."""
+    if not ALERT_CHANNEL_ID:
+        return
+    channel = bot.get_channel(ALERT_CHANNEL_ID)
+    if not channel:
+        try:
+            channel = await bot.fetch_channel(ALERT_CHANNEL_ID)
+        except Exception:
+            return
+    sender = alert.get("senderId") or alert.get("clientId") or "Dashboard"
+    message = alert.get("message", "")
+    if not message:
+        return
+    e = discord.Embed(
+        title="📡 Nachricht vom Dashboard",
+        description=message,
+        color=EMBED_COLOR,
+    )
+    e.set_footer(text=f"Von: {sender} · 666SOUNDsDESIGn Dashboard")
+    try:
+        await channel.send(embed=e)
+    except Exception as exc:
+        log.warning("Alert in Discord posten fehlgeschlagen: %s", exc)
+
+
+@bot.event
+async def on_ready_messenger():
+    """Background task started from on_ready to poll the alert relay."""
+    pass  # started in on_ready via create_task
+
+
+async def _messenger_poll_loop() -> None:
+    """Poll the Player Alert Relay every 15 seconds and post new messages."""
+    await bot.wait_until_ready()
+    if not ALERT_API_URL:
+        log.info("ALERT_API_URL nicht gesetzt — Messenger-Polling deaktiviert")
+        return
+    log.info("Messenger-Polling gestartet → %s", ALERT_API_URL)
+    while not bot.is_closed():
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{ALERT_API_URL}/api/player-alert/history", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        items = data.get("items", [])
+                        for item in reversed(items):
+                            aid = item.get("id", "")
+                            if not aid or aid in _alert_seen_ids:
+                                continue
+                            _alert_seen_ids.add(aid)
+                            sender = item.get("senderId") or item.get("clientId") or ""
+                            if sender.endswith("[Dashboard]") or "Dashboard" in sender:
+                                await _post_alert_to_discord(item)
+        except Exception as exc:
+            log.debug("Messenger-Poll Fehler: %s", exc)
+        await asyncio.sleep(15)
+
+
+@bot.tree.command(name="message", description="Nachricht an das 666SOUNDsDESIGn Dashboard senden")
+@app_commands.describe(text="Deine Nachricht (max. 200 Zeichen)")
+async def cmd_message(interaction: discord.Interaction, text: str):
+    if not ALERT_API_URL:
+        await interaction.response.send_message("❌ ALERT_API_URL ist nicht konfiguriert.", ephemeral=True)
+        return
+    if len(text) > 200:
+        await interaction.response.send_message("❌ Nachricht zu lang (max. 200 Zeichen).", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=False)
+    sender = f"{interaction.user.display_name} [Discord]"
+    payload = {
+        "message": text,
+        "senderId": sender,
+        "clientId": interaction.user.name,
+        "id": f"discord-{interaction.id}",
+        "source": "discord",
+    }
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(
+                f"{ALERT_API_URL}/api/player-alert/send",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r:
+                data = await r.json()
+    except Exception as exc:
+        await interaction.followup.send(f"❌ Fehler: {exc}", ephemeral=True)
+        return
+    if data.get("ok"):
+        e = discord.Embed(
+            title="📡 Nachricht gesendet",
+            description=f"**{interaction.user.display_name}** → Dashboard\n\n> {text}",
+            color=EMBED_COLOR,
+        )
+        e.set_footer(text="Erscheint im 666SOUNDsDESIGn Dashboard · Fraggle DNA")
+        _alert_seen_ids.add(f"discord-{interaction.id}")
+        await interaction.followup.send(embed=e)
+    else:
+        await interaction.followup.send("❌ Dashboard hat nicht geantwortet.", ephemeral=True)
+
+
+@bot.tree.command(name="dashboard-status", description="Dashboard Messenger Status prüfen")
+async def cmd_dashboard_status(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    if not ALERT_API_URL:
+        await interaction.followup.send("❌ ALERT_API_URL nicht konfiguriert.", ephemeral=True)
+        return
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(f"{ALERT_API_URL}/api/player-alert/status", timeout=aiohttp.ClientTimeout(total=8)) as r:
+                data = await r.json()
+        e = discord.Embed(title="📊 Dashboard Messenger Status", color=EMBED_COLOR)
+        e.add_field(name="Status", value="✅ Online" if data.get("ok") else "❌ Fehler", inline=True)
+        e.add_field(name="Nachrichten (History)", value=str(data.get("history_size", 0)), inline=True)
+        e.add_field(name="Aktive Nachricht", value="Ja" if data.get("current_active") else "Nein", inline=True)
+        e.add_field(name="TTL", value=f"{data.get('ttl_seconds', '–')}s", inline=True)
+        e.set_footer(text="666SOUNDsDESIGn Player Alert Relay")
+        await interaction.followup.send(embed=e, ephemeral=True)
+    except Exception as exc:
+        await interaction.followup.send(f"❌ Nicht erreichbar: {exc}", ephemeral=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
