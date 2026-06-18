@@ -11,6 +11,10 @@ services:
         sync: false
       - key: MASTERING_BACKEND_TOKEN
         sync: false
+      - key: MAX_UPLOAD_BYTES
+        value: "52428800"
+      - key: FFMPEG_TIMEOUT_SECONDS
+        value: "120"
       - key: MASTERING_BACKEND_URL
         value: https://666sounds-mp3-mastering.onrender.com
       - key: MASTERING_WORKER_URL

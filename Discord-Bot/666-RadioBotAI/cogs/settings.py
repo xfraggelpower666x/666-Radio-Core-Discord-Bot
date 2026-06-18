@@ -22,6 +22,7 @@ SOFTWARE.
 """
 
 import discord
+import os
 import voicelink
 import psutil
 import function as func
@@ -338,6 +339,9 @@ class Settings(commands.Cog, name="settings"):
     async def debug(self, interaction: discord.Interaction):
         if interaction.user.id not in voicelink.Config().bot_access_user:
             return await interaction.response.send_message("You are not able to use this command!", ephemeral=True)
+
+        if os.getenv("RADIOBOTAI_ENABLE_DEBUG_EXEC", "").lower() != "true":
+            return await interaction.response.send_message("Debug execution is disabled on this deployment.", ephemeral=True)
 
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage(func.ROOT_DIR)

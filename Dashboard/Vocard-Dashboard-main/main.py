@@ -1,10 +1,12 @@
 import asyncio
 import os
 import functools
+import secrets
 import update
 
 from dotenv import load_dotenv
 from datetime import timedelta
+from urllib.parse import urlencode
 
 from hypercorn import Config
 from hypercorn.asyncio import serve
@@ -43,15 +45,25 @@ from utils import (
     setup_logging
 )
 
+load_dotenv()
+
 SETTINGS: Settings = Settings()
+
+for setting_name, setting_value in {
+    "PASSWORD": SETTINGS.password,
+    "SECRET_KEY": SETTINGS.secret_key,
+    "CLIENT_ID": SETTINGS.client_id,
+    "CLIENT_SECRET_ID": SETTINGS.client_secret_id,
+    "REDIRECT_URL": SETTINGS.redirect_url,
+}.items():
+    if not setting_value:
+        raise RuntimeError(f"{setting_name} must be configured before starting the dashboard")
 
 app = Quart(__name__)
 app.secret_key = SETTINGS.secret_key
 
 babel = Babel(app)
 babel.init_app(app, locale_selector=get_locale)
-
-load_dotenv()
 
 def login_required(func):
     @functools.wraps(func)
@@ -117,13 +129,16 @@ async def home():
 
 @app.route("/login", methods=["GET"])
 async def login():
+    state = secrets.token_urlsafe(32)
+    session["oauth_state"] = state
     params = {
         'client_id': SETTINGS.client_id,
         'response_type': 'code',
         'redirect_uri': SETTINGS.redirect_url,
-        'scope': 'identify+guilds'
+        'scope': 'identify guilds',
+        'state': state
     }
-    return redirect(f'{DISCORD_API_BASE_URL}/oauth2/authorize?{"&".join([f"{k}={v}" for k, v in params.items()])}')
+    return redirect(f'{DISCORD_API_BASE_URL}/oauth2/authorize?{urlencode(params)}')
 
 @app.route('/logout', methods=["GET"])
 @login_required
@@ -135,6 +150,11 @@ async def logout(user: User):
 @app.route('/callback')
 async def callback():
     code = request.args.get('code')
+    state = request.args.get('state')
+    expected_state = session.pop("oauth_state", None)
+    if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
+        return redirect(url_for("login"))
+
     data = {
         'client_id': SETTINGS.client_id,
         'client_secret': SETTINGS.client_secret_id,
@@ -166,7 +186,8 @@ async def not_found(error):
 async def ws_bot():
     try:
         header = websocket.headers
-        if header.get("Authorization") != SETTINGS.password:
+        provided = header.get("Authorization")
+        if not SETTINGS.password or not provided or not secrets.compare_digest(provided, SETTINGS.password):
             return await websocket.close(1008, "Incorrect password!")
             
         if not (bot_id := header.get("User-Id")):

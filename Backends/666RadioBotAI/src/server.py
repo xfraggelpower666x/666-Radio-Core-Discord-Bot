@@ -1,4 +1,5 @@
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -12,6 +13,10 @@ from starlette.background import BackgroundTask
 
 APP_NAME = "audio-only-mp3-mastering-backend"
 MASTER_ADMIN_PASSWORD = os.getenv("MASTER_ADMIN_PASSWORD", "").strip()
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "120"))
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
 
 app = FastAPI(title=APP_NAME)
 
@@ -31,7 +36,7 @@ def check_admin(request: Request) -> None:
         )
 
     provided = request.headers.get("x-admin-password", "").strip()
-    if provided != MASTER_ADMIN_PASSWORD:
+    if not provided or not secrets.compare_digest(provided, MASTER_ADMIN_PASSWORD):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -83,13 +88,17 @@ async def process_audio(
         raise HTTPException(status_code=500, detail="ffmpeg not found on server")
 
     original_name = file.filename or "upload.mp3"
+    input_suffix = (Path(original_name).suffix or ".mp3").lower()
+    if input_suffix not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported audio file extension")
+
     safe_stem = Path(original_name).stem
     output_name = f"{safe_stem}_mastered.mp3"
 
     # WICHTIG:
     # KEIN TemporaryDirectory() für die Rückgabedatei benutzen,
     # weil FileResponse die Datei erst NACH der Funktion sendet.
-    input_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=Path(original_name).suffix or ".mp3")
+    input_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=input_suffix)
     output_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
 
     input_path = Path(input_tmp.name)
@@ -99,14 +108,22 @@ async def process_audio(
     output_tmp.close()
 
     try:
-        # Upload speichern
-        content = await file.read()
-        if not content:
+        # Upload in bounded chunks speichern, damit grosse Dateien nicht im RAM landen.
+        total_bytes = 0
+        with open(input_path, "wb") as f:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    cleanup_files(str(input_path), str(output_path))
+                    raise HTTPException(status_code=413, detail="Uploaded file is too large")
+                f.write(chunk)
+
+        if total_bytes == 0:
             cleanup_files(str(input_path), str(output_path))
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-        with open(input_path, "wb") as f:
-            f.write(content)
 
         # ffmpeg mastering / loudness normalize
         cmd = [
@@ -122,7 +139,8 @@ async def process_audio(
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS
         )
 
         if result.returncode != 0:
@@ -152,6 +170,10 @@ async def process_audio(
 
     except HTTPException:
         raise
+
+    except subprocess.TimeoutExpired:
+        cleanup_files(str(input_path), str(output_path))
+        raise HTTPException(status_code=504, detail="ffmpeg timed out")
 
     except Exception as e:
         cleanup_files(str(input_path), str(output_path))

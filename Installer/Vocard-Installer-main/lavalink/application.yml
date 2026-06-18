@@ -74,9 +74,7 @@ plugins:
             keyID: "your key id"
             teamID: "your team id"
             musicKitKey: |
-                -----BEGIN PRIVATE KEY-----
-                your key
-                -----END PRIVATE KEY-----
+                APPLE_MUSIC_PRIVATE_KEY_PLACEHOLDER
             playlistLoadLimit: 6 # The number of pages at 300 tracks each
             albumLoadLimit: 6 # The number of pages at 300 tracks each
         deezer:

@@ -1,0 +1,26 @@
+name = "666myidjstreamadmin"
+main = "src/index.js"
+compatibility_date = "2026-06-09"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+PUBLIC_WORKER_ROLE = "MyIDJ Stream Admin Worker"
+PUBLIC_PROJECT_NAME = "666SOUNDsDESIGn WebRadio / RadioBotAI"
+PUBLIC_VERSION = "v1.2.1-real-skip-no-listener-spike"
+PUBLIC_WEBRADIO_BASE_URL = "https://webradio.666soundsdesign-broadcaster.com"
+STREAM_SID = "1"
+# NOWPLAYING_URL darf NICHT auf /stream zeigen, sonst entsteht ein künstlicher Listener.
+NOWPLAYING_URL = "http://my.idjstream.com:8686/admin.cgi?sid=1&mode=viewxml"
+STREAM_ADMIN_BASE_URL = "http://my.idjstream.com:8686/admin.cgi"
+
+# Als Cloudflare Secrets setzen, nicht als Klartext in die Repo:
+# STREAM_ADMIN_USER
+# STREAM_ADMIN_PASSWORD
+# ADMIN_TOKEN
+#
+# Optional:
+# RADIO_AUTODJ_SKIP_URL
+# RADIO_AUTODJ_PLAYLIST_SWITCH_URL

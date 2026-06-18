@@ -13,9 +13,15 @@ services:
         value: "30"
       - key: MASTER_ADMIN_PASSWORD
         sync: false
+      - key: PLAYER_ALERT_BACKEND_TOKEN
+        sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: MASTERING_BACKEND_TOKEN
         sync: false
+      - key: MAX_UPLOAD_BYTES
+        value: "52428800"
+      - key: FFMPEG_TIMEOUT_SECONDS
+        value: "120"
       - key: SYSTEM_PW_WORKER_URL
         value: https://666-system-pw.666soundsdesign-broadcaster.com

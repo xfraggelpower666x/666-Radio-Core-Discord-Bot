@@ -1,6 +1,6 @@
 // ============================================================
 // 666 RadioBotAI — Vocard Sovereign Dashboard Worker
-// Version: v1.1.3
+// Version: v1.2.2
 //
 // Zweck:
 // - Cloudflare Worker API fuer RadioBotAI
@@ -18,7 +18,7 @@ const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, authorization, x-admin-token, x-discord-gate-code, x-666-auth-mode"
+  "access-control-allow-headers": "content-type"
 };
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -53,7 +53,7 @@ function getPublicConfig(env) {
   return {
     projectName: env.PUBLIC_PROJECT_NAME || "666SOUNDsDESIGn WebRadio",
     botName: env.PUBLIC_BOT_NAME || "666 RadioBotAI",
-    version: env.PUBLIC_VERSION || "v1.1.3",
+    version: env.PUBLIC_VERSION || "v1.2.2-audit-split-real-skip",
     role: env.PUBLIC_WORKER_ROLE || "RadioBotAI API / Vocard Dashboard Bridge / Discord Shooter Control",
     webradioBaseUrl: base,
     streamUrl: env.PUBLIC_MAIN_STREAM_URL || `${base}/stream`,
@@ -85,6 +85,11 @@ function getPublicConfig(env) {
       "/auth/verify",
       "/admin/status",
       "/admin/protected-test",
+      "/radio/autodj/status",
+      "/radio/autodj/skip",
+      "/api/radio/skip",
+      "/autodj/skip",
+      "/radio/autodj/playlist",
       "/preset/1",
       "/preset/2",
       "/preset/3",
@@ -115,7 +120,7 @@ function getAuthConfig(env) {
   return {
     adminTokenEnabled: Boolean(env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN),
     gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256),
-    legacyGateHashEnabled: true,
+    legacyGateHashEnabled: Boolean(env.DISCORD_GATE_SHA256),
     adminAuthVerifyUrl: env.ADMIN_AUTH_VERIFY_URL || env.AUTH_VERIFY_URL || "",
     adminAuthLoginUrl: env.ADMIN_AUTH_LOGIN_URL || env.AUTH_LOGIN_URL || "",
     passwordWorkerUrl: env.ADMIN_PASSWORD_VERIFY_URL || env.ADMIN_PW_VERIFY_URL || env.PASSWORD_VERIFY_URL || env.PW_VERIFY_URL || "",
@@ -481,10 +486,13 @@ async function playerAlertBackendFetch(env, path, init = {}) {
   url.pathname = url.pathname.replace(/\/$/, "") + path;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6500);
+  const backendToken = String(env.PLAYER_ALERT_BACKEND_TOKEN || env.PLAYER_ALERT_TOKEN || "").trim();
+  const headers = { "content-type": "application/json", ...(init.headers || {}) };
+  if (backendToken) headers["x-player-alert-token"] = backendToken;
   try {
     const response = await fetch(url.toString(), {
       signal: controller.signal,
-      headers: { "content-type": "application/json", ...(init.headers || {}) },
+      headers,
       ...init
     });
     clearTimeout(timer);
@@ -621,7 +629,7 @@ async function handlePlayerAlert(request, env) {
       clientId: senderId,
       createdAt: new Date(now).toISOString(),
       timestamp: now,
-      version: playerAlertCleanText(body.version || "v1.1.3", 40),
+      version: playerAlertCleanText(body.version || "v1.2.2-audit-split-real-skip", 40),
       source: "666radiobotai-worker"
     };
 
@@ -648,7 +656,7 @@ async function handlePlayerAlert(request, env) {
 // END PLAYER_ALERT_RENDER_BRIDGE_V1_1_3
 
 
-const FALLBACK_DISCORD_GATE_SHA256 = "911aa98122df056905093e0e83a4a0b0f304f32bcf2e69cf035347ddc8872cb0";
+const FALLBACK_DISCORD_GATE_SHA256 = "";
 const DISCORD_RUNTIME = globalThis.__S666_RADIOBOTAI_DISCORD_RUNTIME__ || {
   lastOkAt: 0,
   lastErrorAt: 0,
@@ -887,12 +895,12 @@ async function handleDiscordStatus(env) {
   return json({
     ok: true,
     addon: "RadioBotAI Direct Discord Shooter",
-    version: "v1.1.3",
+    version: "v1.2.2-audit-split-real-skip",
     mode: "direct-worker-webhook-dispatch",
     targets: publicTargetStatus(env),
     protection: {
       adminTokenEnabled: Boolean(env.DISCORD_ADMIN_TOKEN || env.ADMIN_TOKEN),
-      gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256 || FALLBACK_DISCORD_GATE_SHA256),
+      gateCodeEnabled: Boolean(env.DISCORD_GATE_CODE || env.DISCORD_GATE_SHA256),
       adminAuthWorkerConfigured: Boolean(env.ADMIN_AUTH_VERIFY_URL || env.AUTH_VERIFY_URL),
       passwordWorkerConfigured: Boolean(env.ADMIN_PASSWORD_VERIFY_URL || env.ADMIN_PW_VERIFY_URL || env.PASSWORD_VERIFY_URL || env.PW_VERIFY_URL)
     },
@@ -916,11 +924,9 @@ async function verifyDiscordAction(request, env) {
   const admin = await verifyAdmin(request, env);
   if (admin.ok) return admin;
 
-  // Compatibility with old WebRadio gate hash: if no explicit DISCORD_GATE_CODE is set,
-  // a known legacy hash can still validate the x-discord-gate-code header without exposing the code.
   const providedGate = cleanText(request.headers.get("x-discord-gate-code") || "", "", 140);
-  if (providedGate) {
-    const expectedHash = String(env.DISCORD_GATE_SHA256 || FALLBACK_DISCORD_GATE_SHA256).trim().toLowerCase();
+  if (providedGate && env.DISCORD_GATE_SHA256) {
+    const expectedHash = String(env.DISCORD_GATE_SHA256).trim().toLowerCase();
     if ((await sha256Hex(providedGate)) === expectedHash) return { ok: true, method: "legacy-gate-hash" };
   }
 
@@ -1065,6 +1071,101 @@ async function handleDashboard(env) {
   return html(dashboardHtml(env));
 }
 
+function getAutoDJConfig(env) {
+  return {
+    adminWorkerUrl: env.RADIO_ADMIN_WORKER_URL || env.MYIDJ_ADMIN_WORKER_URL || "https://666myidjstreamadmin.666soundsdesign-broadcaster.com",
+    adminTokenConfigured: Boolean(env.RADIO_ADMIN_WORKER_TOKEN || env.ADMIN_TOKEN),
+    skipConfigured: true,
+    playlistConfigured: Boolean(env.RADIO_AUTODJ_PLAYLIST_SWITCH_URL),
+    safeState: "playlist-switch-hold-until-confirmed-sonicpanel-request"
+  };
+}
+
+function adminWorkerHeaders(env) {
+  const token = env.RADIO_ADMIN_WORKER_TOKEN || env.ADMIN_TOKEN || "";
+  const headers = { "content-type": "application/json" };
+  if (token) {
+    headers["authorization"] = `Bearer ${token}`;
+    headers["x-admin-token"] = token;
+  }
+  return headers;
+}
+
+async function proxyAdminWorker(path, request, env, fallbackBody = {}) {
+  const cfg = getAutoDJConfig(env);
+  if (!cfg.adminWorkerUrl) return json({ ok: false, error: "RADIO_ADMIN_WORKER_URL_MISSING" }, 501);
+
+  let body = fallbackBody;
+  if (request.method !== "GET") {
+    try { body = await request.json(); } catch (_) { body = fallbackBody; }
+  }
+
+  const target = cfg.adminWorkerUrl.replace(/\/$/, "") + path;
+  try {
+    const res = await fetch(target, {
+      method: "POST",
+      headers: adminWorkerHeaders(env),
+      body: JSON.stringify({ source: "666radiobotai-main-worker", ...body }),
+      cache: "no-store"
+    });
+    const textBody = await res.text();
+    let data = null;
+    try { data = textBody ? JSON.parse(textBody) : null; } catch (_) {}
+    return json({
+      ok: res.ok,
+      proxied: true,
+      targetWorker: cfg.adminWorkerUrl,
+      status: res.status,
+      data: data || textBody.slice(0, 1200)
+    }, res.ok ? 200 : 502);
+  } catch (error) {
+    return json({ ok: false, proxied: true, error: String(error?.message || error) }, 502);
+  }
+}
+
+async function handleAutoDJ(request, env, pathname) {
+  const cfg = getAutoDJConfig(env);
+
+  if (pathname === "/radio/autodj/status") {
+    return json({
+      ok: true,
+      module: "autodj-control",
+      version: "v1.2.2-audit-split-real-skip",
+      skip: "GO",
+      playlist: cfg.playlistConfigured ? "CONFIGURED_UNTESTED" : "HOLD_NO_CONFIRMED_SONICPANEL_ENDPOINT",
+      adminWorkerUrlConfigured: Boolean(cfg.adminWorkerUrl),
+      adminTokenConfigured: cfg.adminTokenConfigured,
+      noListenerSpikeGuard: "ACTIVE_SKIP_ONLY_VIA_ADMIN_WORKER"
+    });
+  }
+
+  if (pathname === "/radio/autodj/skip" || pathname === "/api/radio/skip" || pathname === "/autodj/skip") {
+    if (request.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED_USE_POST" }, 405);
+    const body = await requestBody(request);
+    const auth = await verifyAdmin(request, env, body);
+    if (!auth.ok) return json({ ok: false, error: "UNAUTHORIZED", auth: publicAuthStatus(env) }, 401);
+    return proxyAdminWorker("/admin/autodj/skip", request, env, { action: "skip", ...body });
+  }
+
+  if (pathname === "/radio/autodj/playlist" || pathname === "/radio/autodj/playlist-switch" || pathname === "/autodj/playlist-switch") {
+    if (!cfg.playlistConfigured) {
+      return json({
+        ok: false,
+        action: "playlist-switch",
+        error: "PLAYLIST_SWITCH_HOLD",
+        message: "Kein Tricksen: SonicPanel Playlist On-the-Fly bleibt deaktiviert, bis ein echter stabiler SonicPanel-Request bekannt ist."
+      }, 501);
+    }
+    if (request.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED_USE_POST" }, 405);
+    const body = await requestBody(request);
+    const auth = await verifyAdmin(request, env, body);
+    if (!auth.ok) return json({ ok: false, error: "UNAUTHORIZED", auth: publicAuthStatus(env) }, 401);
+    return proxyAdminWorker("/admin/autodj/playlist-switch", request, env, { action: "playlist-switch", ...body });
+  }
+
+  return null;
+}
+
 function notFound(pathname) {
   return json({ ok: false, error: "NOT_FOUND", path: pathname }, 404);
 }
@@ -1099,6 +1200,11 @@ export default {
     if (pathname === "/api/discord/message" && request.method === "POST") return directDiscordShooter(request, env, "message");
     if (pathname === "/api/discord/nowplaying" && request.method === "POST") return directDiscordShooter(request, env, "nowplaying");
     if (pathname === "/api/discord/test" && request.method === "POST") return directDiscordShooter(request, env, "test");
+
+    if (["/radio/autodj/status", "/radio/autodj/skip", "/api/radio/skip", "/autodj/skip", "/radio/autodj/playlist", "/radio/autodj/playlist-switch", "/autodj/playlist-switch"].includes(pathname)) {
+      const autodjResponse = await handleAutoDJ(request, env, pathname);
+      if (autodjResponse) return autodjResponse;
+    }
 
     const presetMatch = pathname.match(/^\/preset\/([1-5])$/);
     if (presetMatch) return handlePreset(request, env, presetMatch[1]);
