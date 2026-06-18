@@ -210,17 +210,23 @@ class RadioPlayer:
         transformed = discord.PCMVolumeTransformer(src, volume=min(self._volume * 1.5, 2.0))
 
         done = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
         def after_tts(err):
             if err:
                 log.error("TTS FFmpeg: %s", err)
-            done.set()
-            try:
-                os.unlink(audio_path)
-            except Exception:
-                pass
+            loop.call_soon_threadsafe(done.set)
 
         self.voice_client.play(transformed, after=after_tts)
-        await done.wait()
+        try:
+            await done.wait()
+        finally:
+            try:
+                os.unlink(audio_path)
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                log.warning("TTS-Datei konnte nicht gelöscht werden: %s", exc)
 
         if was_playing and self.current_url:
             src2 = discord.FFmpegPCMAudio(
@@ -283,9 +289,9 @@ def radio_embed(title: str, desc: str = None) -> discord.Embed:
 async def _resolve_vc(interaction: discord.Interaction, channel: Optional[discord.VoiceChannel] = None) -> Optional[discord.VoiceChannel]:
     if channel:
         return channel
-    if interaction.user.voice and isinstance(interaction.user.voice.channel, discord.VoiceChannel):
+    if isinstance(interaction.user, discord.Member) and interaction.user.voice and isinstance(interaction.user.voice.channel, discord.VoiceChannel):
         return interaction.user.voice.channel
-    if DEFAULT_VOICE_CHANNEL_ID:
+    if interaction.guild and DEFAULT_VOICE_CHANNEL_ID:
         ch = interaction.guild.get_channel(DEFAULT_VOICE_CHANNEL_ID)
         if isinstance(ch, discord.VoiceChannel):
             return ch
@@ -299,10 +305,12 @@ intents.voice_states = True
 intents.message_content = False
 
 bot = commands.Bot(command_prefix="!", help_command=None, intents=intents)
+_messenger_poll_task: Optional[asyncio.Task] = None
 
 
 @bot.event
 async def on_ready():
+    global _messenger_poll_task
     log.info("══════════════════════════════════════════")
     log.info("  666 RadioBotAI Lite — ONLINE")
     log.info("  Angetrieben von reiner Fraggle-DNA")
@@ -314,7 +322,8 @@ async def on_ready():
         log.info("  Slash-Commands: %d synced", len(synced))
     except Exception as e:
         log.error("  Sync failed: %s", e)
-    asyncio.create_task(_messenger_poll_loop())
+    if not _messenger_poll_task or _messenger_poll_task.done():
+        _messenger_poll_task = asyncio.create_task(_messenger_poll_loop())
 
 
 @bot.event
@@ -341,7 +350,7 @@ async def on_member_join(member: discord.Member):
 # /play  /join  /leave  /stop  /bye
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@bot.tree.command(name="play", description="Startet Radio-Stream. /play → Standard-Stream. /play <url> → beliebiger Stream. /play <preset-name> → gespeichertes Preset.")
+@bot.tree.command(name="play", description="Startet den Standard-Stream, eine URL oder ein gespeichertes Preset.")
 @app_commands.describe(stream="Stream-URL oder Preset-Name (leer = Standard-Stream)")
 async def cmd_play(interaction: discord.Interaction, stream: Optional[str] = None, channel: Optional[discord.VoiceChannel] = None):
     await interaction.response.defer()
@@ -401,6 +410,10 @@ async def cmd_join(interaction: discord.Interaction, channel: Optional[discord.V
 
 @bot.tree.command(name="leave", description="Bot verlässt den Voice-Channel (Aliase: /stop /bye /cancel)")
 async def cmd_leave(interaction: discord.Interaction):
+    await _handle_leave(interaction)
+
+
+async def _handle_leave(interaction: discord.Interaction) -> None:
     if not player.is_connected():
         return await interaction.response.send_message("Bot ist nicht verbunden.", ephemeral=True)
     await player.leave()
@@ -409,12 +422,12 @@ async def cmd_leave(interaction: discord.Interaction):
 
 @bot.tree.command(name="stop", description="Stoppt den Stream und verlässt den Channel")
 async def cmd_stop(interaction: discord.Interaction):
-    await cmd_leave.callback(cmd_leave, interaction)
+    await _handle_leave(interaction)
 
 
 @bot.tree.command(name="bye", description="Verlässt den Voice-Channel")
 async def cmd_bye(interaction: discord.Interaction):
-    await cmd_leave.callback(cmd_leave, interaction)
+    await _handle_leave(interaction)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -608,6 +621,10 @@ async def radio_volume(interaction: discord.Interaction, value: app_commands.Ran
 
 @radio_group.command(name="repair", description="Stream neu starten (Repair / Reconnect)")
 async def radio_repair(interaction: discord.Interaction):
+    await _handle_radio_repair(interaction)
+
+
+async def _handle_radio_repair(interaction: discord.Interaction) -> None:
     await interaction.response.defer()
     url  = player.current_url or _STREAM_MAIN_URL
     name = player.current_name or "Hauptstream"
@@ -628,7 +645,7 @@ async def radio_repair(interaction: discord.Interaction):
 @radio_group.command(name="reconnect", description="Aktuellen Stream kontrolliert neu verbinden")
 async def radio_reconnect(interaction: discord.Interaction):
     """Alias for repair — reconnects the current stream without changing preset."""
-    await radio_repair.callback(radio_repair, interaction)
+    await _handle_radio_repair(interaction)
 
 
 @radio_group.command(name="reset", description="Player-Status zurücksetzen (kein Stream-Start)")
