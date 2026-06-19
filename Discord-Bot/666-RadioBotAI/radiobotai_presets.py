@@ -45,4 +45,3 @@ def get_preset(name: str) -> dict[str, str] | None:
         if key == preset.get("label", "").lower():
             return {"key": preset_key, **preset}
     return None
-

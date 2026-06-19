@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 
-from voicelink import Config
+from radiobotai_voicelink_compat import Config
 
 
 STARTED_AT = time.time()
@@ -22,4 +22,3 @@ def runtime_status() -> dict:
         "stream_url_configured": bool(Config().radio.get("stream_url")),
         "version": Config().version,
     }
-

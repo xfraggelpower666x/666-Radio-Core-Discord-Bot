@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from voicelink import Config, MongoDBHandler
+from radiobotai_voicelink_compat import Config, MongoDBHandler
 
 
 def _member_from_ctx(ctx: Any):
@@ -94,4 +94,3 @@ async def require_dj(ctx: Any) -> bool:
     if response and hasattr(response, "send_message"):
         await response.send_message(message, ephemeral=True)
     return False
-

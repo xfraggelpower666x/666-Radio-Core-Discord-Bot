@@ -334,10 +334,10 @@ async def on_member_join(member: discord.Member):
     e = discord.Embed(
         title=f"⚡ Neue Frequenz erkannt — willkommen, {member.display_name}",
         description=(
-            f"Du betrittst **666SOUNDsDESIGn WebRadio**.\n\n"
-            f"Ich bin **666 RadioBotAI** — angetrieben von **Fraggle-DNA**:\n"
-            f"> Druck · Tiefe · Chaos · Cyberpunk · Human Core\n\n"
-            f"*Sound becomes a room. The human remains the origin.*"
+            "Du betrittst **666SOUNDsDESIGn WebRadio**.\n\n"
+            "Ich bin **666 RadioBotAI** — angetrieben von **Fraggle-DNA**:\n"
+            "> Druck · Tiefe · Chaos · Cyberpunk · Human Core\n\n"
+            "*Sound becomes a room. The human remains the origin.*"
         ),
         color=EMBED_COLOR,
     )
@@ -662,7 +662,7 @@ async def radio_reset(interaction: discord.Interaction):
     e.add_field(name="Voice-Channel", value=channel_mention,                 inline=True)
     e.add_field(
         name="Nächste Schritte",
-        value=f"• `/play` — Hauptstream starten\n• `/radio reconnect` — Letzten Stream wiederherstellen\n• `/preset play main` — Explizit MAIN starten",
+        value="• `/play` — Hauptstream starten\n• `/radio reconnect` — Letzten Stream wiederherstellen\n• `/preset play main` — Explizit MAIN starten",
         inline=False,
     )
     e.set_footer(text="Keine Config, keine Presets, keine ENV-Vars wurden verändert.")

@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  python-lint-and-security:
+    name: Python Lint + Security
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scan tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 bandit safety
+
+      # ── flake8 ──────────────────────────────────────────────────────────────
+      # Real bugs (undefined names, syntax errors, unused imports) fail the build.
+      - name: flake8 (critical errors)
+        run: |
+          flake8 Discord-Bot \
+            --count --select=E9,F63,F7,F82,F401,F811,F841 \
+            --show-source --statistics
+
+      # Full style report is informational only and never fails the build.
+      - name: flake8 (style report, non-blocking)
+        run: |
+          flake8 Discord-Bot \
+            --count --max-line-length=200 \
+            --statistics --exit-zero
+
+      # ── bandit ──────────────────────────────────────────────────────────────
+      # Fail only on MEDIUM+ severity findings; the Render backend is excluded
+      # because it is deployed and governed separately.
+      - name: Bandit security scan
+        run: |
+          bandit -r Discord-Bot -ll -x Discord-Bot/666-RadioBotAI/voicelink \
+            -f screen
+
+      # ── safety ──────────────────────────────────────────────────────────────
+      - name: Safety CVE check (Lite)
+        run: |
+          safety check \
+            -r Discord-Bot/666-RadioBotAI-Lite/requirements.txt \
+            --full-report
+
+      - name: Safety CVE check (Add-on)
+        run: |
+          safety check \
+            -r Discord-Bot/666-RadioBotAI/requirements.txt \
+            --full-report
