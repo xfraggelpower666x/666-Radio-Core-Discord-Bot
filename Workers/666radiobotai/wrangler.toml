@@ -1,5 +1,5 @@
 name = "666radiobotai"
-main = "Worker/src/index.js"
+main = "Arbeiter/src/index.js"
 compatibility_date = "2026-06-09"
 workers_dev = true
 
