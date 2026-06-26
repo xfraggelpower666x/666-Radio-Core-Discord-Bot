@@ -1,0 +1,7 @@
+{
+  "token": "",
+  "prefix": "!",
+  "ownerid": "",
+  "note": "Secrets bitte in .env speichern. Diese Datei ist nur Fallback/Beispiel.",
+  "version": "v3.3.0"
+}

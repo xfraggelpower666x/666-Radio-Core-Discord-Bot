@@ -1,0 +1,32 @@
+{
+  "1": {
+    "name": "666SOUNDsDESIGn Main Stream",
+    "type": "audio_stream",
+    "url": "https://my.idjstream.com/666soundsdesign/stream",
+    "description": "Primärer HTTPS-Streampfad. Standardpreset für den 24/7-Betrieb."
+  },
+  "2": {
+    "name": "666SOUNDsDESIGn SSL Port 8686",
+    "type": "audio_stream",
+    "url": "https://my.idjstream.com:8686",
+    "description": "Direkter SSL-Port ohne Mount-Pfad. Fallback-Kandidat."
+  },
+  "3": {
+    "name": "666SOUNDsDESIGn SSL Stream Mount",
+    "type": "audio_stream",
+    "url": "https://my.idjstream.com:8686/stream",
+    "description": "Direkter SSL-Port mit /stream-Mount. Fallback-Kandidat."
+  },
+  "4": {
+    "name": "666SOUNDsDESIGn TuneIn Player",
+    "type": "external_link",
+    "url": "https://tunein.com/embed/player/s357001/",
+    "description": "Externer TuneIn-Webplayer. Wird als Link ausgegeben, nicht als FFmpeg-Audiostream gestartet."
+  },
+  "5": {
+    "name": "666SOUNDsDESIGn Local AutoDJ",
+    "type": "local_autodj",
+    "url": "",
+    "description": "Lokale Musikbibliothek mit Scanner, SQLite, Queue, Suche, Playlists und AutoDJ-Engine."
+  }
+}

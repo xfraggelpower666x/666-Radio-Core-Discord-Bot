@@ -1,0 +1,75 @@
+{
+  "guild_id": 0,
+  "voice_channel_id": 0,
+  "auto_join_channel_id": 0,
+  "radio_text_channel_id": 0,
+  "feedback_channel_id": 0,
+  "afk_channel_id": 0,
+  "admin_role_id": 0,
+  "sysadmin_role_id": 0,
+  "default_genre": "666SOUNDsDESIGn",
+  "default_language": "de",
+  "default_ui_mode": "full",
+  "default_presence": "666SOUNDsDESIGn AutoDJ bereit",
+  "scanner": {
+    "supported_extensions": ["mp3", "flac", "wav", "ogg", "m4a", "aac"],
+    "cover_filenames": ["cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "front.png"],
+    "metadata_fields": {
+      "artist": ["artist", "ARTIST", "TPE1"],
+      "title": ["title", "TITLE", "TIT2"],
+      "album": ["album", "ALBUM", "TALB"],
+      "date": ["date", "DATE", "year", "YEAR", "TDRC"],
+      "label": ["organization", "ORGANIZATION", "TPUB"],
+      "catnum": ["catalognumber", "CATALOGNUMBER", "TXXX:CATALOGNUMBER"],
+      "mediatype": ["mediatype", "MEDIATYPE", "TMED"],
+      "rating": ["rating", "RATING", "POPM"]
+    }
+  },
+  "cleanup_interval_days": 14,
+  "scan_interval_days": 1,
+  "ffmpeg_path": "ffmpeg",
+  "db_path": "db/autodj.sqlite3",
+  "restricted_channels": {},
+  "timings": {
+    "embed_refresh_minutes": 58,
+    "progress_update_seconds": 15,
+    "history_save_seconds": 2,
+    "play_count_threshold_percent": 0.1,
+    "error_retry_seconds": 5,
+    "afk_timeout_seconds": 0
+  },
+  "defaults": {
+    "volume": 0.7,
+    "use_loudnorm": false,
+    "autocomplete_limit": 25
+  },
+  "languages": [
+    {"code": "de", "label": "Deutsch", "emoji": "🇩🇪"},
+    {"code": "en", "label": "English", "emoji": "🇬🇧"}
+  ],
+  "ui_settings": {
+    "search_items_per_page": 5,
+    "history_items_per_page": 5,
+    "queue_items_per_page": 5,
+    "playlist_items_per_page": 5,
+    "queue_refresh_limit": 11,
+    "player_upcoming_limit": 5,
+    "theme": {
+      "primary": "0x9B30FF",
+      "secondary": "0x11131A",
+      "success": "0x00E5FF",
+      "warning": "0xFEE75C",
+      "danger": "0xFF2E88",
+      "idle": "0xFF2E88",
+      "paused": "0xFEE75C",
+      "playing": "0x00E5FF",
+      "background": "0x11131A",
+      "accent": "0x9B30FF"
+    }
+  },
+  "genres": {
+    "666SOUNDsDESIGn": ["music/666SOUNDsDESIGn"],
+    "Guest-Mixes": ["music/Guest-Mixes"]
+  },
+  "virtual_genres": []
+}
