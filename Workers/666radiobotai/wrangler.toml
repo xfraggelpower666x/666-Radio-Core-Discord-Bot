@@ -8,15 +8,14 @@ enabled = true
 
 [vars]
 PUBLIC_PROJECT_NAME = "666SOUNDsDESIGn WebRadio"
-PUBLIC_BOT_NAME = "666 RadioBotAI"
+PUBLIC_BOT_NAME = "666SOUNDsDESIGn WebRadio Bot AI"
 PUBLIC_VERSION = "v1.2.2-audit-split-real-skip"
-PUBLIC_WORKER_ROLE = "RadioBotAI API / Vocard Dashboard Bridge / Discord Shooter Control"
+PUBLIC_WORKER_ROLE = "RadioBotAI API / Discord Shooter Control"
 PUBLIC_WEBRADIO_BASE_URL = "https://webradio.666soundsdesign-broadcaster.com"
-PUBLIC_MAIN_STREAM_URL = "https://webradio.666soundsdesign-broadcaster.com/stream"
-PUBLIC_FALLBACK_STREAM_URL = "https://webradio.666soundsdesign-broadcaster.com/fallback-stream"
+PUBLIC_MAIN_STREAM_URL = "https://my.idjstream.com/8686/stream"
+PUBLIC_FALLBACK_STREAM_URL = "https://my.idjstream.com/666soundsdesign/stream"
 PUBLIC_NOWPLAYING_URL = "https://webradio.666soundsdesign-broadcaster.com/api/nowplaying"
-PUBLIC_HEALTH_URL = "https://webradio.666soundsdesign-broadcaster.com/health"
+PUBLIC_HEALTH_URL = "https://my.idjstream.com/8686/health"
 PUBLIC_TUNEIN_URL = "https://tunein.com/radio/s357001"
-
-# Renderer/Render Backend Relay: Set real URL in Cloudflare variables after Render deploy.
-PLAYER_ALERT_BACKEND_URL = ""
+"666RadioBotAI_BackEnd" = "https://666radiobotai-backend.666soundsdesign-broadcaster.com/"
+PLAYER_ALERT_BACKEND_URL = "https://666webradio.666soundsdesign-broadcaster.com/"
