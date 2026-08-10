@@ -173,7 +173,31 @@ The Discord Voice runtime should ultimately provide stable 24/7 playback, reconn
 8. Repair/verify the persistent Discord Voice runtime separately.
 9. Do not modify productive WebRadio core merely to make RadioBotAI work.
 
-## 11. Current status labels
+## 11. Interruption-safe continuation rule
+
+Work on RadioBotAI must be resumable without losing the active task when the user sends side remarks, corrections, screenshots, new evidence, or unrelated short interjections during an ongoing step.
+
+Rules:
+
+- A user interjection does **not** cancel the active task unless the user explicitly says to stop, cancel, abandon, replace, or change scope.
+- Before switching attention to the interjection, keep the current task/checkpoint and unfinished substeps intact.
+- After addressing the interjection, resume the interrupted task automatically from the last verified checkpoint.
+- Do not silently drop queued repair/audit steps because the conversation branched temporarily.
+- If new information affects the active task, integrate it and continue from the adjusted checkpoint.
+- If new information conflicts with the active task, mark `CONFLICT` and pause only the conflicting substep; keep unaffected work queued.
+- Never claim that an interrupted step finished if it did not.
+- After any consequential write, record the resulting commit/checkpoint before continuing.
+
+Continuation state labels:
+
+- `ACTIVE` — currently executing task.
+- `QUEUED` — already agreed follow-up work not yet completed.
+- `INTERRUPTED` — temporarily displaced by a user interjection, must resume automatically.
+- `RESUMED` — continued from the last verified checkpoint.
+- `BLOCKED` — cannot continue without external input/access.
+- `DONE` — verified completed step.
+
+## 12. Current status labels
 
 - `VERIFIED`: existing Discord bot identity is `666SOUNDsDESIGn WebRadio Bot AI`.
 - `VERIFIED`: Cloudflare Git deploy target is `Workers/666radiobotai` on branch `666RadioBotAI`.
@@ -183,3 +207,4 @@ The Discord Voice runtime should ultimately provide stable 24/7 playback, reconn
 - `CONFLICT`: current Cloudflare public values and repository `wrangler.toml` are not fully synchronized.
 - `PROTECTED`: Renderer / Render-related repository directories and files must remain intact.
 - `OUT_OF_SCOPE`: destructive or unrelated changes to the productive WebRadio system.
+- `CONTINUATION_REQUIRED`: side remarks/interjections must not cause active or queued RadioBotAI work to be lost.
