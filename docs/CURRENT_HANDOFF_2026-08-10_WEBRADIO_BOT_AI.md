@@ -197,14 +197,64 @@ Continuation state labels:
 - `BLOCKED` — cannot continue without external input/access.
 - `DONE` — verified completed step.
 
-## 12. Current status labels
+## 12. Current Render / Discord Voice runtime — verified migration
+
+The historical `Discord-Bot/666-RadioBotAI-Lite` path is no longer the current runtime location, but the Discord Voice runtime was not lost. Its function has migrated into the repository root.
+
+Verified current files:
+
+- `/Dockerfile`
+- `/start.sh`
+- `/main.py`
+- `/alert_bridge.py`
+
+Current root `Dockerfile` uses Python 3.12 slim, installs `ffmpeg`, `curl` and CA certificates, installs `requirements.txt`, copies the repository and starts `/app/start.sh`.
+
+Current `/start.sh` executes:
+
+```text
+python -u main.py
+```
+
+Current `/main.py` explicitly identifies itself as the Discord Voice Radio Bot and contains Discord intents, stream configuration, auto-join/reconnect controls, FFmpeg reconnect options, health-server integration and the Radio Alert Bridge.
+
+Therefore the earlier `LOCATION_DRIFT` is resolved as:
+
+`MIGRATED_TO_ROOT / VOICE_RUNTIME_PRESENT`
+
+Do not restore the old Lite directory merely because the old path returns 404. The current root runtime is the active architecture unless a later audit proves otherwise.
+
+## 13. Current Player Alert / Messenger bridge — verified architecture
+
+Current `/alert_bridge.py` explicitly defines the primary route as:
+
+```text
+Discord Bot
+  -> Cloudflare RadioBotAI Worker
+  -> Render Alert Backend
+```
+
+and supports an optional direct fallback:
+
+```text
+Discord Bot
+  -> Render Alert Backend directly
+```
+
+The bridge reads all credentials only from environment variables, supports `/api/player-alert/send`, `/status`, `/current`, `/history`, and a worker-side `/render/status` check. Direct Render fallback is disabled by default and must only be enabled intentionally with the backend URL/token configured.
+
+This confirms that the Messenger/Player-Alert backend is a separate role from the Discord Voice runtime, while both belong to the same RadioBotAI architecture.
+
+## 14. Current status labels
 
 - `VERIFIED`: existing Discord bot identity is `666SOUNDsDESIGn WebRadio Bot AI`.
 - `VERIFIED`: Cloudflare Git deploy target is `Workers/666radiobotai` on branch `666RadioBotAI`.
 - `VERIFIED`: WebRadio already implements robust metadata upstream/fallback architecture.
 - `VERIFIED`: the dedicated RadioBotAI Player Alert Render backend exists and responds with its route set.
+- `VERIFIED`: current Discord Voice runtime is present at repo root via Dockerfile -> start.sh -> main.py and includes FFmpeg.
+- `VERIFIED`: current alert bridge intentionally routes Bot -> Cloudflare Worker -> Render Alert Backend, with optional direct Render fallback.
 - `REQUIRED`: three Discord webhook secrets must be replaced because the previous Discord server was deleted.
-- `CONFLICT`: current Cloudflare public values and repository `wrangler.toml` are not fully synchronized.
+- `CONFLICT`: current Cloudflare public values and repository `wrangler.toml` require readback after deploy; public values were synchronized in Git but live deploy state remains to be verified.
 - `PROTECTED`: Renderer / Render-related repository directories and files must remain intact.
 - `OUT_OF_SCOPE`: destructive or unrelated changes to the productive WebRadio system.
 - `CONTINUATION_REQUIRED`: side remarks/interjections must not cause active or queued RadioBotAI work to be lost.
